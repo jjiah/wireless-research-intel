@@ -156,3 +156,26 @@ def test_inject_wiki_links_handles_multiple_topics():
     assert "[[Topic A]]" in result
     assert "[[Topic B]]" in result
     assert "[[Topic C]]" in result
+
+
+from generate_report import write_report
+
+
+# --- write_report ---
+
+def test_write_report_creates_file(tmp_path):
+    path = write_report("# Report", tmp_path, "2026-02-27")
+    assert path.exists()
+    assert path.name == "2026-02-27-wireless-digest.md"
+
+
+def test_write_report_creates_parent_dir(tmp_path):
+    out_dir = tmp_path / "nested" / "dir"
+    write_report("# Report", out_dir, "2026-02-27")
+    assert out_dir.exists()
+
+
+def test_write_report_content_correct(tmp_path):
+    content = "# My Report\nSome content."
+    path = write_report(content, tmp_path, "2026-02-27")
+    assert path.read_text(encoding="utf-8") == content

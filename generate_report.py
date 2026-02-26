@@ -75,3 +75,11 @@ def build_payload(papers: list[dict]) -> str:
 def inject_wiki_links(markdown: str) -> str:
     """Wrap topic headings (### N. Topic) in Obsidian [[wiki-links]]."""
     return re.sub(r"(### \d+\.\s+)(?!\[\[)(.+)", r"\1[[\2]]", markdown)
+
+
+def write_report(content: str, output_dir: Path, date_str: str) -> Path:
+    """Write the report Markdown to output_dir/YYYY-MM-DD-wireless-digest.md."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f"{date_str}-wireless-digest.md"
+    path.write_text(content, encoding="utf-8")
+    return path
