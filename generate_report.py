@@ -130,7 +130,10 @@ def call_llm(payload: str, template: str, weeks: int, api_key: str) -> str:
         ],
         max_tokens=8192,
     )
-    return response.choices[0].message.content
+    content = response.choices[0].message.content
+    if content is None:
+        raise ValueError(f"LLM returned no content (finish_reason={response.choices[0].finish_reason})")
+    return content
 
 
 def load_env_file(path: Path) -> None:
@@ -178,6 +181,9 @@ def main() -> None:
 
     papers = load_papers(week_dirs)
     print(f"  {len(papers)} papers loaded")
+    if not papers:
+        print("No papers found in the selected weeks.", file=sys.stderr)
+        sys.exit(1)
 
     payload = build_payload(papers)
 
