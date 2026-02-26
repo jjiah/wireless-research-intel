@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import statistics
+from pathlib import Path
+
+
+def load_weeks(weeks_dir: Path, n: int) -> list[Path]:
+    """Return the last n week directories, sorted by name."""
+    if not weeks_dir.exists():
+        return []
+    dirs = sorted([d for d in weeks_dir.iterdir() if d.is_dir()])
+    return dirs[-n:] if len(dirs) >= n else dirs
+
+
+def load_papers(
+    week_dirs: list[Path],
+    cap_multiplier: float = 3.0,
+    cap_count: int = 300,
+) -> list[dict]:
+    """Load all papers from week dirs; cap anomalous weeks by citation rank."""
+    week_papers: list[list[dict]] = []
+    for week_dir in week_dirs:
+        papers = [
+            json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted(week_dir.glob("*.json"))
+        ]
+        week_papers.append(papers)
+
+    counts = [len(w) for w in week_papers]
+    # Use the lower median (median of the lower half) so anomalous weeks don't
+    # inflate the reference baseline. For small lists this equates to min().
+    sorted_counts = sorted(counts)
+    lower_half = sorted_counts[: max(1, len(sorted_counts) // 2)]
+    baseline = statistics.median(lower_half) if len(counts) >= 2 else float("inf")
+    threshold = baseline * cap_multiplier
+
+    result: list[dict] = []
+    for papers in week_papers:
+        if len(papers) > threshold and len(papers) > cap_count:
+            papers = sorted(
+                papers,
+                key=lambda p: p.get("cited_by_count") or 0,
+                reverse=True,
+            )[:cap_count]
+        result.extend(papers)
+    return result
