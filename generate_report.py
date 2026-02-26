@@ -38,7 +38,7 @@ def load_papers(
 
     result: list[dict] = []
     for papers in week_papers:
-        if len(papers) > threshold and len(papers) > cap_count:
+        if len(papers) > threshold:
             papers = sorted(
                 papers,
                 key=lambda p: p.get("cited_by_count") or 0,
