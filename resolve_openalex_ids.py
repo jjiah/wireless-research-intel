@@ -18,7 +18,7 @@ class Venue:
     name: str
     type: str
     publisher: str
-    openalex_source_id: Optional[str]
+    openalex_source_ids: List[str]
 
 
 def load_env_file(path: Path) -> None:
@@ -40,7 +40,8 @@ def load_sources(path: Path) -> List[Venue]:
         raise FileNotFoundError(f"Missing sources file: {path}")
 
     venues: List[Venue] = []
-    current = {"id": "", "name": "", "type": "", "publisher": "", "openalex_source_id": None}
+    current = {"id": "", "name": "", "type": "", "publisher": "", "openalex_source_ids": []}
+    in_openalex_ids = False
 
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
@@ -52,7 +53,7 @@ def load_sources(path: Path) -> List[Venue]:
                         name=current["name"],
                         type=current["type"],
                         publisher=current["publisher"],
-                        openalex_source_id=current["openalex_source_id"],
+                        openalex_source_ids=current["openalex_source_ids"],
                     )
                 )
             current = {
@@ -60,8 +61,9 @@ def load_sources(path: Path) -> List[Venue]:
                 "name": "",
                 "type": "",
                 "publisher": "",
-                "openalex_source_id": None,
+                "openalex_source_ids": [],
             }
+            in_openalex_ids = False
             continue
         if stripped.startswith("name:"):
             current["name"] = stripped.split(":", 1)[1].strip().strip("\"'")
@@ -72,9 +74,16 @@ def load_sources(path: Path) -> List[Venue]:
         if stripped.startswith("publisher:"):
             current["publisher"] = stripped.split(":", 1)[1].strip().strip("\"'")
             continue
-        if stripped.startswith("openalex_source_id:"):
-            value = stripped.split(":", 1)[1].strip().strip("\"'")
-            current["openalex_source_id"] = value if value.lower() != "null" else None
+        if stripped.startswith("openalex_source_ids:"):
+            in_openalex_ids = True
+            continue
+        if in_openalex_ids and stripped.startswith("- "):
+            value = stripped.split("-", 1)[1].strip().strip("\"'")
+            if value:
+                current["openalex_source_ids"].append(value)
+            continue
+        if in_openalex_ids and stripped and not stripped.startswith("- "):
+            in_openalex_ids = False
 
     if current["id"]:
         venues.append(
@@ -83,28 +92,34 @@ def load_sources(path: Path) -> List[Venue]:
                 name=current["name"],
                 type=current["type"],
                 publisher=current["publisher"],
-                openalex_source_id=current["openalex_source_id"],
+                openalex_source_ids=current["openalex_source_ids"],
             )
         )
 
-    return venues
+    # De-dup by venue_id
+    deduped: Dict[str, Venue] = {}
+    for venue in venues:
+        deduped[venue.venue_id] = venue
+    return list(deduped.values())
 
 
 def save_sources(path: Path, venues: List[Venue]) -> None:
     lines: List[str] = []
-    lines.append("version: 3")
+    lines.append("version: 4")
     lines.append("updated_by: \"resolve_openalex_ids\"")
-    lines.append("notes: \"OpenAlex-only ingestion. Populate openalex_source_id for each venue.\"")
+    lines.append("notes: \"OpenAlex-only ingestion. Use openalex_source_ids list per venue.\"")
     lines.append("venues:")
     for venue in venues:
         lines.append(f"  - id: {venue.venue_id}")
         lines.append(f"    name: \"{venue.name}\"")
         lines.append(f"    type: \"{venue.type}\"")
         lines.append(f"    publisher: \"{venue.publisher}\"")
-        if venue.openalex_source_id:
-            lines.append(f"    openalex_source_id: \"{venue.openalex_source_id}\"")
+        lines.append("    openalex_source_ids:")
+        if venue.openalex_source_ids:
+            for source_id in venue.openalex_source_ids:
+                lines.append(f"      - \"{source_id}\"")
         else:
-            lines.append("    openalex_source_id: null")
+            lines.append("      - \"\"")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -139,10 +154,68 @@ def resolve_source_id(name: str, api_key: Optional[str], email: Optional[str]) -
     return openalex_id.rsplit("/", 1)[-1]
 
 
+def resolve_source_ids(
+    name: str, api_key: Optional[str], email: Optional[str], limit: int
+) -> List[str]:
+    headers = {}
+    if api_key:
+        headers["api-key"] = api_key
+    if email:
+        headers["From"] = email
+    url = f"https://api.openalex.org/sources?search={quote(name)}&per-page={max(1, limit)}"
+    data = fetch_json(url, headers=headers)
+    results = data.get("results") or []
+    scored = []
+    for item in results:
+        openalex_id = item.get("id")
+        if not openalex_id:
+            continue
+        score = item.get("works_count")
+        if not isinstance(score, int):
+            score = -1
+        scored.append((score, openalex_id.rsplit("/", 1)[-1]))
+    if any(score >= 0 for score, _ in scored):
+        scored.sort(key=lambda x: x[0], reverse=True)
+    return [sid for _, sid in scored[:limit]]
+
+
+def validate_sources(venues: List[Venue], api_key: Optional[str], email: Optional[str]) -> None:
+    headers = {}
+    if api_key:
+        headers["api-key"] = api_key
+    if email:
+        headers["From"] = email
+    for venue in venues:
+        if not venue.openalex_source_ids:
+            print(f"{venue.venue_id}: missing openalex_source_ids")
+            continue
+        total = 0
+        for source_id in venue.openalex_source_ids:
+            url = f"https://api.openalex.org/works?filter=primary_location.source.id:{source_id}&per-page=1"
+            try:
+                data = fetch_json(url, headers=headers)
+                total += data.get("meta", {}).get("count", 0)
+            except Exception as exc:
+                print(f"{venue.venue_id}: error {exc}")
+                total = -1
+                break
+        try:
+            if total >= 0:
+                print(f"{venue.venue_id}: count={total}")
+        except Exception as exc:
+            print(f"{venue.venue_id}: error {exc}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Resolve OpenAlex source IDs for sources.yaml.")
     parser.add_argument("--file", default="sources.yaml")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing openalex_source_id values.")
+    parser.add_argument("--validate", action="store_true", help="Validate sources by fetching work counts.")
+    parser.add_argument(
+        "--discover-conferences",
+        type=int,
+        help="For conference venues, set top N OpenAlex source IDs from search results.",
+    )
     args = parser.parse_args()
 
     load_env_file(Path("openalex.env"))
@@ -154,15 +227,23 @@ def main() -> None:
     updated = 0
 
     for venue in venues:
-        if venue.openalex_source_id and not args.overwrite:
+        if venue.openalex_source_ids and not args.overwrite:
+            continue
+        if args.discover_conferences and venue.type == "conference":
+            ids = resolve_source_ids(venue.name, api_key, email, args.discover_conferences)
+            if ids:
+                venue.openalex_source_ids = ids
+                updated += 1
             continue
         source_id = resolve_source_id(venue.name, api_key, email)
         if source_id:
-            venue.openalex_source_id = source_id
+            venue.openalex_source_ids = [source_id]
             updated += 1
 
     save_sources(path, venues)
     print(f"Updated {updated} venues.")
+    if args.validate:
+        validate_sources(venues, api_key, email)
 
 
 if __name__ == "__main__":

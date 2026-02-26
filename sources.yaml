@@ -1,69 +1,89 @@
-version: 3
+version: 4
 updated_by: "resolve_openalex_ids"
-notes: "OpenAlex-only ingestion. Populate openalex_source_id for each venue."
+notes: "OpenAlex-only ingestion. Use openalex_source_ids list per venue."
 venues:
   - id: ieee_twc
     name: "IEEE Transactions on Wireless Communications"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S63459445"
+    openalex_source_ids:
+      - "S63459445"
   - id: ieee_commmag
     name: "IEEE Communications Magazine"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S158797327"
+    openalex_source_ids:
+      - "S158797327"
   - id: ieee_cst
     name: "IEEE Communications Surveys & Tutorials"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S23688054"
+    openalex_source_ids:
+      - "S23688054"
   - id: ieee_jsac
     name: "IEEE Journal on Selected Areas in Communications"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S90422530"
+    openalex_source_ids:
+      - "S90422530"
   - id: ieee_jsasp
     name: "IEEE Journal of Selected Topics in Signal Processing"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S42167783"
+    openalex_source_ids:
+      - "S42167783"
   - id: ieee_tsp
     name: "IEEE Transactions on Signal Processing"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S168680287"
+    openalex_source_ids:
+      - "S168680287"
   - id: ieee_tvt
     name: "IEEE Transactions on Vehicular Technology"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S10936095"
+    openalex_source_ids:
+      - "S10936095"
   - id: ieee_tcom
     name: "IEEE Transactions on Communications"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S196647941"
+    openalex_source_ids:
+      - "S196647941"
   - id: ieee_icc
     name: "IEEE International Conference on Communications"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: "S4363608495"
+    openalex_source_ids:
+      - "S4363608495"
+      - "S4363607711"
+      - "S4363608034"
   - id: ieee_globecom
     name: "IEEE Global Communications Conference"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: "S4363607712"
+    openalex_source_ids:
+      - "S4363607712"
+      - "S4363607705"
+      - "S4363607714"
   - id: ieee_wcnc
     name: "IEEE Wireless Communications and Networking Conference"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: "S4363607776"
+    openalex_source_ids:
+      - "S4363607776"
+      - "S4210195247"
   - id: ieee_wcl
     name: "IEEE Wireless Communications Letters"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: "S2500830676"
+    openalex_source_ids:
+      - "S2500830676"
   - id: ieee_vtc
     name: "IEEE Vehicular Technology Conference"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: "S4210185404"
+    openalex_source_ids:
+      - "S4210185404"
+      - "S4363607744"
+      - "S4363607774"

@@ -24,6 +24,9 @@ Override week by date (any date inside the target week):
 python weekly_report.py --date 2026-02-22
 ```
 
+Metrics definitions:
+- See `METRICS.md`.
+
 ## Metadata ingestion (OpenAlex-only)
 Fetch new papers via OpenAlex and store JSON metadata into per-venue folders under `resource/`.
 
@@ -32,12 +35,19 @@ Run:
 python ingest_openalex.py
 ```
 
+Filter venues:
+```powershell
+python ingest_openalex.py --only ieee_twc,ieee_jsac
+python ingest_openalex.py --exclude ieee_vtc,ieee_icc
+```
+
 Behavior:
 - Each paper is saved as `resource/by_date/YYYY-MM-DD/{doi}.json`
 - Existing DOI files are skipped
 - Items without DOI are skipped
 - SQLite index is stored at `resource/index.sqlite` for fast dedupe/search (lean: no abstract)
 - Only OpenAlex works with type `article` or `preprint` are saved (others are skipped)
+- Authorships are stored as author + institution names only (lean)
 
 OpenAlex:
 ```powershell
@@ -53,7 +63,7 @@ Manage sources:
 python manage_sources.py list
 python manage_sources.py show ieee_twc
 python manage_sources.py set-openalex ieee_twc S123456789
-python manage_sources.py add --id myconf --name "My Conf" --type conference --publisher IEEE
+python manage_sources.py add --id myconf --name "My Conf" --type conference --publisher IEEE --openalex-source-ids S123,S456
 python manage_sources.py remove myconf
 ```
 
@@ -61,6 +71,16 @@ Auto-resolve OpenAlex source IDs:
 ```powershell
 notepad openalex.env
 python resolve_openalex_ids.py
+```
+
+Discover multiple sources for conferences:
+```powershell
+python resolve_openalex_ids.py --discover-conferences 3 --overwrite
+```
+
+Validate source IDs:
+```powershell
+python resolve_openalex_ids.py --validate
 ```
 
 Time range:

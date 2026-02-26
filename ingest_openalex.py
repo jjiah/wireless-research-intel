@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+import time
 import ssl
 import sqlite3
 
@@ -19,7 +20,7 @@ import sqlite3
 class Source:
     venue_id: str
     venue_name: str
-    openalex_source_id: str
+    openalex_source_ids: List[str]
 
 
 def load_env_file(path: Path) -> None:
@@ -43,43 +44,71 @@ def load_sources(path: Path) -> List[Source]:
     sources: List[Source] = []
     venue_id = ""
     venue_name = ""
-    openalex_source_id = ""
+    openalex_source_ids: List[str] = []
+    in_openalex_ids = False
 
     for line in path.read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if stripped.startswith("- id:"):
-            if venue_id and openalex_source_id:
-                sources.append(Source(venue_id, venue_name, openalex_source_id))
+            if venue_id and openalex_source_ids:
+                sources.append(Source(venue_id, venue_name, openalex_source_ids))
             venue_id = stripped.split(":", 1)[1].strip().strip("\"'")
             venue_name = ""
-            openalex_source_id = ""
+            openalex_source_ids = []
+            in_openalex_ids = False
             continue
         if stripped.startswith("name:"):
             venue_name = stripped.split(":", 1)[1].strip().strip("\"'")
             continue
-        if stripped.startswith("openalex_source_id:"):
-            openalex_source_id = stripped.split(":", 1)[1].strip().strip("\"'")
-            if openalex_source_id.lower() == "null":
-                openalex_source_id = ""
+        if stripped.startswith("openalex_source_ids:"):
+            in_openalex_ids = True
+            continue
+        if in_openalex_ids and stripped.startswith("- "):
+            value = stripped.split("-", 1)[1].strip().strip("\"'")
+            if value:
+                openalex_source_ids.append(value)
+            continue
+        if in_openalex_ids and stripped and not stripped.startswith("- "):
+            in_openalex_ids = False
 
-    if venue_id and openalex_source_id:
-        sources.append(Source(venue_id, venue_name, openalex_source_id))
+    if venue_id and openalex_source_ids:
+        sources.append(Source(venue_id, venue_name, openalex_source_ids))
 
-    return sources
+    # De-dup by venue_id
+    deduped: Dict[str, Source] = {}
+    for source in sources:
+        deduped[source.venue_id] = source
+    return list(deduped.values())
 
 
-def fetch_json(url: str, headers: Optional[Dict[str, str]] = None, timeout: int = 30) -> dict:
-    req = Request(
-        url,
-        headers={
-            "User-Agent": "wireless-research-intel/0.2 (openalex)",
-            "Accept": "application/json",
-            **(headers or {}),
-        },
-    )
-    context = ssl.create_default_context()
-    with urlopen(req, timeout=timeout, context=context) as resp:
-        return json.loads(resp.read().decode("utf-8", errors="ignore"))
+def fetch_json(
+    url: str,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: int = 30,
+    retries: int = 3,
+    backoff: float = 1.5,
+) -> dict:
+    last_exc: Optional[Exception] = None
+    for attempt in range(retries):
+        try:
+            req = Request(
+                url,
+                headers={
+                    "User-Agent": "wireless-research-intel/0.2 (openalex)",
+                    "Accept": "application/json",
+                    **(headers or {}),
+                },
+            )
+            context = ssl.create_default_context()
+            with urlopen(req, timeout=timeout, context=context) as resp:
+                return json.loads(resp.read().decode("utf-8", errors="ignore"))
+        except Exception as exc:
+            last_exc = exc
+            if attempt < retries - 1:
+                time.sleep(backoff ** attempt)
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Failed to fetch JSON.")
 
 
 def normalize_doi(doi_value: Optional[str]) -> Optional[str]:
@@ -109,25 +138,20 @@ def reconstruct_abstract(inv_index: Optional[dict]) -> Optional[str]:
     return " ".join(words)
 
 
-def flatten_institutions(authorships: List[dict]) -> List[dict]:
-    institutions: List[dict] = []
-    seen = set()
+def simplify_authorships(authorships: List[dict]) -> List[dict]:
+    simplified: List[dict] = []
     for auth in authorships:
+        author = auth.get("author") or {}
+        author_name = author.get("display_name")
+        if not author_name:
+            continue
+        institutions = []
         for inst in auth.get("institutions") or []:
-            inst_id = inst.get("id") or inst.get("ror") or inst.get("display_name")
-            if not inst_id or inst_id in seen:
-                continue
-            seen.add(inst_id)
-            institutions.append(
-                {
-                    "id": inst.get("id"),
-                    "display_name": inst.get("display_name"),
-                    "ror": inst.get("ror"),
-                    "country_code": inst.get("country_code"),
-                    "type": inst.get("type"),
-                }
-            )
-    return institutions
+            name = inst.get("display_name")
+            if name and name not in institutions:
+                institutions.append(name)
+        simplified.append({"author": author_name, "institutions": institutions})
+    return simplified
 
 
 def openalex_works(
@@ -187,7 +211,9 @@ def ingest_source(
     api_key: str,
     email: Optional[str],
 ) -> Tuple[int, int, int]:
-    works = openalex_works(source.openalex_source_id, since_date, api_key, email)
+    works: List[dict] = []
+    for source_id in source.openalex_source_ids:
+        works.extend(openalex_works(source_id, since_date, api_key, email))
 
     by_date_dir = resource_dir / "by_date"
     by_date_dir.mkdir(parents=True, exist_ok=True)
@@ -269,8 +295,7 @@ def ingest_source(
                 "url": url,
                 "abstract": abstract or "",
                 "authors": authors,
-                "authorships": authorships,
-                "institutions": flatten_institutions(authorships),
+                "authorships": simplify_authorships(authorships),
                 "keywords": keywords,
                 "source_url": "openalex",
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
@@ -312,6 +337,14 @@ def main() -> None:
         type=int,
         help="Convenience option to set --since to today minus N days.",
     )
+    parser.add_argument(
+        "--only",
+        help="Comma-separated venue_ids to include (e.g., ieee_twc,ieee_jsac).",
+    )
+    parser.add_argument(
+        "--exclude",
+        help="Comma-separated venue_ids to exclude.",
+    )
     args = parser.parse_args()
 
     load_env_file(Path("openalex.env"))
@@ -328,6 +361,13 @@ def main() -> None:
         print("No OpenAlex sources found in sources.yaml", file=sys.stderr)
         sys.exit(1)
 
+    only_set = set()
+    exclude_set = set()
+    if args.only:
+        only_set = {v.strip() for v in args.only.split(",") if v.strip()}
+    if args.exclude:
+        exclude_set = {v.strip() for v in args.exclude.split(",") if v.strip()}
+
     resource_dir = Path(args.resource_dir)
     resource_dir.mkdir(parents=True, exist_ok=True)
     state_path = resource_dir / "last_run.json"
@@ -343,8 +383,12 @@ def main() -> None:
     total_skipped = 0
 
     for source in sources:
-        if not source.openalex_source_id:
+        if not source.openalex_source_ids:
             print(f"{source.venue_id}: missing openalex_source_id", file=sys.stderr)
+            continue
+        if only_set and source.venue_id not in only_set:
+            continue
+        if exclude_set and source.venue_id in exclude_set:
             continue
         try:
             added, seen, skipped = ingest_source(source, resource_dir, since_date, api_key, email)
