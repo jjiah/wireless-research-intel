@@ -1,88 +1,83 @@
-# wireless-research-intel
-Venue-Based Weekly Research Observatory: Crawl metadata from authoritative wireless communication venues. Perform topic clustering. Detect topic trend changes over time. Generate structured research summary.
+﻿# wireless-research-intel
 
-## Weekly report output
-Reports are written to your Obsidian vault folder using `weekly_report.py` and `report_config.yaml`.
+OpenAlex metadata ingestion for wireless venues with incremental updates and publication-week storage.
 
-Private config:
-- Set `REPORT_DIR` in `private.env` (kept out of git).
-- `filename_template`: `weekly-wireless-{week_start}.md`
-- `week_start_day`: `sunday`
+## What this project now does
+1. Fetch new paper metadata since the last run date.
+2. Store each new paper JSON into publication-week folders:
+   - `resource/by_publication_week/<week_start>/<doi>.json`
 
-Run:
-```powershell
-python weekly_report.py
-```
+## Core scripts
+- `ingest_openalex.py`: ingest metadata from OpenAlex and write weekly-organized JSON files.
+- `organize_by_publication_date.py`: reorganize existing JSON files by publication `day` or `week`.
+- `manage_sources.py`: manage venue source config in `sources.yaml`.
+- `resolve_openalex_ids.py`: discover/validate OpenAlex source IDs.
 
-Optional input (JSON or CSV with `title,venue,published,url,abstract`):
-```powershell
-python weekly_report.py --input data\weekly\items.csv
-```
+## Incremental ingestion (since last run)
+State file:
+- `resource/last_run.json`
 
-Override week by date (any date inside the target week):
-```powershell
-python weekly_report.py --date 2026-02-22
-```
-
-Metrics definitions:
-- See `METRICS.md`.
-
-## Metadata ingestion (OpenAlex-only)
-Fetch new papers via OpenAlex and store JSON metadata into per-venue folders under `resource/`.
+Behavior:
+- If `--since` is not provided, `ingest_openalex.py` uses `resource/last_run.json`.
+- After run, it updates `resource/last_run.json`.
+- DOI-based dedupe is enforced via `resource/index.sqlite`.
 
 Run:
 ```powershell
 python ingest_openalex.py
 ```
 
-Filter venues:
+First run / backfill example:
 ```powershell
-python ingest_openalex.py --only ieee_twc,ieee_jsac
-python ingest_openalex.py --exclude ieee_vtc,ieee_icc
+python ingest_openalex.py --lookback-days 365
 ```
 
-Behavior:
-- Each paper is saved as `resource/by_date/YYYY-MM-DD/{doi}.json`
-- Existing DOI files are skipped
-- Items without DOI are skipped
-- SQLite index is stored at `resource/index.sqlite` for fast dedupe/search (lean: no abstract)
-- Only OpenAlex works with type `article` or `preprint` are saved (others are skipped)
-- Authorships are stored as author + institution names only (lean)
-
-OpenAlex:
+Manual date override example:
 ```powershell
-notepad openalex.env
-python ingest_openalex.py --lookback-days 60
+python ingest_openalex.py --since 2026-01-01
 ```
 
-Sources:
-- Add `openalex_source_id` for each venue in `sources.yaml`.
+Bounded range example:
+```powershell
+python ingest_openalex.py --since 2024-12-23 --until 2024-12-29
+```
 
-Manage sources:
+Note:
+- When using a custom date window (`--since`, `--until`, or `--lookback-days`), `resource/last_run.json` is not updated.
+
+## Publication-week organization
+By default, ingestion writes to:
+- `resource/by_publication_week/<week_start>/<doi>.json`
+
+Week convention:
+```powershell
+python ingest_openalex.py --week-start-day monday
+python ingest_openalex.py --week-start-day sunday
+```
+
+## Reorganize existing legacy data
+If you already have files in other layouts (for example `resource/by_date`), reorganize them:
+
+By publication week:
+```powershell
+python organize_by_publication_date.py --input-root resource/by_date --output-root resource/by_publication_week --group-by week --week-start-day monday
+```
+
+By publication day:
+```powershell
+python organize_by_publication_date.py --input-root resource/by_date --output-root resource/by_publication_date --group-by day
+```
+
+## Sources
+Manage venues in `sources.yaml`:
 ```powershell
 python manage_sources.py list
 python manage_sources.py show ieee_twc
 python manage_sources.py set-openalex ieee_twc S123456789
-python manage_sources.py add --id myconf --name "My Conf" --type conference --publisher IEEE --openalex-source-ids S123,S456
-python manage_sources.py remove myconf
 ```
 
-Auto-resolve OpenAlex source IDs:
+Auto-resolve source IDs:
 ```powershell
-notepad openalex.env
 python resolve_openalex_ids.py
-```
-
-Discover multiple sources for conferences:
-```powershell
-python resolve_openalex_ids.py --discover-conferences 3 --overwrite
-```
-
-Validate source IDs:
-```powershell
 python resolve_openalex_ids.py --validate
 ```
-
-Time range:
-- First run (previous year): `python ingest_openalex.py --lookback-days 365`
-- Subsequent runs: `python ingest_openalex.py` (uses `resource/last_run.json`)

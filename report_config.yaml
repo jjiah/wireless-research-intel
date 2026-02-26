@@ -1,5 +1,0 @@
-report_dir: ""
-filename_template: "weekly-wireless-{week_start}.md"
-week_start_day: "sunday"
-timezone: "local"
-sources_file: "sources.yaml"

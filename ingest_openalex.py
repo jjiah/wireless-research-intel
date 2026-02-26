@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote
@@ -122,6 +122,26 @@ def normalize_doi(doi_value: Optional[str]) -> Optional[str]:
     return doi or None
 
 
+def sanitize_filename(value: str) -> str:
+    return value.replace("/", "_").replace(":", "_")
+
+
+def parse_iso_date(value: Optional[str]) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def week_start_for(day: date, week_start_day: str) -> date:
+    week_start_day = week_start_day.lower()
+    target = 0 if week_start_day == "monday" else 6
+    delta = (day.weekday() - target) % 7
+    return day - timedelta(days=delta)
+
+
 def reconstruct_abstract(inv_index: Optional[dict]) -> Optional[str]:
     if not inv_index:
         return None
@@ -157,6 +177,7 @@ def simplify_authorships(authorships: List[dict]) -> List[dict]:
 def openalex_works(
     source_id: str,
     since_date: Optional[str],
+    until_date: Optional[str],
     api_key: str,
     email: Optional[str],
 ) -> List[dict]:
@@ -167,6 +188,8 @@ def openalex_works(
     filter_parts = [f"primary_location.source.id:{source_id}", "type:article|preprint"]
     if since_date:
         filter_parts.append(f"from_publication_date:{since_date}")
+    if until_date:
+        filter_parts.append(f"to_publication_date:{until_date}")
     filter_query = ",".join(filter_parts)
 
     per_page = 200
@@ -178,7 +201,7 @@ def openalex_works(
             f"filter={quote(filter_query)}"
             f"&per-page={per_page}"
             f"&cursor={quote(cursor)}"
-            "&select=id,display_name,doi,type,publication_date,primary_location,authorships,keywords,abstract_inverted_index"
+            "&select=id,display_name,doi,type,publication_date,primary_location,authorships,keywords,abstract_inverted_index,cited_by_count"
         )
         data = fetch_json(url, headers=headers)
         results = data.get("results") or []
@@ -208,15 +231,17 @@ def ingest_source(
     source: Source,
     resource_dir: Path,
     since_date: Optional[str],
+    until_date: Optional[str],
     api_key: str,
     email: Optional[str],
+    week_start_day: str,
 ) -> Tuple[int, int, int]:
     works: List[dict] = []
     for source_id in source.openalex_source_ids:
-        works.extend(openalex_works(source_id, since_date, api_key, email))
+        works.extend(openalex_works(source_id, since_date, until_date, api_key, email))
 
-    by_date_dir = resource_dir / "by_date"
-    by_date_dir.mkdir(parents=True, exist_ok=True)
+    by_week_dir = resource_dir / "by_publication_week"
+    by_week_dir.mkdir(parents=True, exist_ok=True)
 
     db_path = resource_dir / "index.sqlite"
     conn = sqlite3.connect(db_path)
@@ -252,13 +277,7 @@ def ingest_source(
                 seen += 1
                 continue
 
-            ingest_date = datetime.now(timezone.utc).date().isoformat()
-            date_dir = by_date_dir / ingest_date
-            date_dir.mkdir(parents=True, exist_ok=True)
-            out_path = date_dir / f"{doi.replace('/', '_').replace(':', '_')}.json"
-            if out_path.exists():
-                seen += 1
-                continue
+            ingest_day = datetime.now(timezone.utc).date()
 
             authorships = work.get("authorships") or []
             authors = []
@@ -288,6 +307,7 @@ def ingest_source(
                 "openalex_id": work.get("id"),
                 "openalex_type": work.get("type"),
                 "publication_date": work.get("publication_date"),
+                "cited_by_count": work.get("cited_by_count"),
                 "primary_location": primary_location,
                 "venue_id": source.venue_id,
                 "venue_name": source.venue_name,
@@ -300,6 +320,12 @@ def ingest_source(
                 "source_url": "openalex",
                 "fetched_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            publication_day = parse_iso_date(record["published"]) or ingest_day
+            publication_week_start = week_start_for(publication_day, week_start_day).isoformat()
+            filename = f"{sanitize_filename(doi)}.json"
+            out_path = by_week_dir / publication_week_start / filename
+            out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(json.dumps(record, indent=2, ensure_ascii=False), encoding="utf-8")
 
             conn.execute(
@@ -332,6 +358,7 @@ def main() -> None:
     parser.add_argument("--sources", default="sources.yaml", help="Path to sources.yaml")
     parser.add_argument("--resource-dir", default="resource", help="Output folder for per-venue metadata")
     parser.add_argument("--since", help="Only include items published on/after this date (YYYY-MM-DD).")
+    parser.add_argument("--until", help="Only include items published on/before this date (YYYY-MM-DD).")
     parser.add_argument(
         "--lookback-days",
         type=int,
@@ -344,6 +371,12 @@ def main() -> None:
     parser.add_argument(
         "--exclude",
         help="Comma-separated venue_ids to exclude.",
+    )
+    parser.add_argument(
+        "--week-start-day",
+        default="monday",
+        choices=["monday", "sunday"],
+        help="Week convention used for resource/by_publication_week folder naming.",
     )
     args = parser.parse_args()
 
@@ -373,10 +406,23 @@ def main() -> None:
     state_path = resource_dir / "last_run.json"
 
     since_date = args.since
+    until_date = args.until
     if args.lookback_days is not None:
         since_date = (datetime.now(timezone.utc).date() - timedelta(days=args.lookback_days)).isoformat()
     if not since_date:
         since_date = load_last_run(state_path)
+
+    parsed_since = parse_iso_date(since_date) if since_date else None
+    parsed_until = parse_iso_date(until_date) if until_date else None
+    if since_date and parsed_since is None:
+        print(f"Invalid --since date: {since_date}", file=sys.stderr)
+        sys.exit(2)
+    if until_date and parsed_until is None:
+        print(f"Invalid --until date: {until_date}", file=sys.stderr)
+        sys.exit(2)
+    if parsed_since and parsed_until and parsed_since > parsed_until:
+        print("--since cannot be later than --until", file=sys.stderr)
+        sys.exit(2)
 
     total_added = 0
     total_seen = 0
@@ -391,7 +437,15 @@ def main() -> None:
         if exclude_set and source.venue_id in exclude_set:
             continue
         try:
-            added, seen, skipped = ingest_source(source, resource_dir, since_date, api_key, email)
+            added, seen, skipped = ingest_source(
+                source,
+                resource_dir,
+                since_date,
+                until_date,
+                api_key,
+                email,
+                args.week_start_day,
+            )
             total_added += added
             total_seen += seen
             total_skipped += skipped
@@ -400,7 +454,13 @@ def main() -> None:
             print(f"{source.venue_id}: error {exc}", file=sys.stderr)
 
     print(f"Total: +{total_added} new, {total_seen} existing, {total_skipped} skipped (no DOI)")
-    save_last_run(state_path, datetime.now(timezone.utc).date().isoformat())
+    use_default_incremental_window = (
+        args.since is None and args.until is None and args.lookback_days is None
+    )
+    if use_default_incremental_window:
+        save_last_run(state_path, datetime.now(timezone.utc).date().isoformat())
+    else:
+        print("Skipped updating last_run.json because a custom date window was used.")
 
 
 if __name__ == "__main__":
