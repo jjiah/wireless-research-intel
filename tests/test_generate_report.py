@@ -3,6 +3,7 @@ import json
 import pytest
 from pathlib import Path
 from generate_report import load_weeks, load_papers
+from generate_report import truncate_abstract, build_payload
 
 
 def make_week(tmp_path: Path, name: str, papers: list[dict]) -> Path:
@@ -80,3 +81,53 @@ def test_load_papers_does_not_cap_normal_week(tmp_path):
     week = make_week(tmp_path, "2025-01-06", [sample_paper() for _ in range(90)])
     result = load_papers([week])
     assert len(result) == 90
+
+
+# --- truncate_abstract ---
+
+def test_truncate_short_abstract_unchanged():
+    text = "Short abstract here."
+    assert truncate_abstract(text, max_words=150) == text
+
+
+def test_truncate_long_abstract():
+    words = ["word"] * 200
+    text = " ".join(words)
+    result = truncate_abstract(text, max_words=150)
+    assert result.endswith("...")
+    assert len(result.split()) == 151  # 150 words + "..."
+
+
+# --- build_payload ---
+
+def test_build_payload_produces_jsonl():
+    papers = [
+        {
+            "title": "My Paper",
+            "venue_id": "ieee_twc",
+            "published": "2025-02-10",
+            "cited_by_count": 42,
+            "abstract": "Some abstract text.",
+        }
+    ]
+    result = build_payload(papers)
+    assert "My Paper" in result
+    assert "ieee_twc" in result
+    assert "42" in result
+    assert "2025-02" in result
+
+
+def test_build_payload_replaces_pipes_in_title():
+    papers = [
+        {
+            "title": "Paper A | Paper B",
+            "venue_id": "ieee_twc",
+            "published": "2025-02-10",
+            "cited_by_count": 0,
+            "abstract": "Abstract.",
+        }
+    ]
+    result = build_payload(papers)
+    lines = result.strip().split("\n")
+    fields = lines[0].split(" | ")
+    assert "|" not in fields[0]  # title field has no stray pipes

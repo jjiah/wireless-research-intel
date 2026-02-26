@@ -46,3 +46,26 @@ def load_papers(
             )[:cap_count]
         result.extend(papers)
     return result
+
+
+def truncate_abstract(abstract: str, max_words: int = 150) -> str:
+    """Return first max_words words of abstract, with ellipsis if truncated."""
+    words = abstract.split()
+    if len(words) <= max_words:
+        return abstract
+    return " ".join(words[:max_words]) + " ..."
+
+
+def build_payload(papers: list[dict]) -> str:
+    """Build compact pipe-delimited payload for the LLM prompt."""
+    lines: list[str] = []
+    for p in papers:
+        title = (p.get("title") or "").replace("|", "/")
+        venue = p.get("venue_id") or "unknown"
+        week = (p.get("published") or "")[:7]  # YYYY-MM
+        citations = p.get("cited_by_count") or 0
+        abstract = truncate_abstract(
+            (p.get("abstract") or "").replace("|", "/"), max_words=150
+        )
+        lines.append(f"{title} | {venue} | {week} | {citations} | {abstract}")
+    return "\n".join(lines)
