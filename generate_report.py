@@ -74,4 +74,4 @@ def build_payload(papers: list[dict]) -> str:
 
 def inject_wiki_links(markdown: str) -> str:
     """Wrap topic headings (### N. Topic) in Obsidian [[wiki-links]]."""
-    return re.sub(r"(### \d+\.\s+)(.+)", r"\1[[\2]]", markdown)
+    return re.sub(r"(### \d+\.\s+)(?!\[\[)(.+)", r"\1[[\2]]", markdown)
