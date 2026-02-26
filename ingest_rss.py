@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass
@@ -105,6 +106,34 @@ def fetch_text(url: str, timeout: int = 30) -> str:
     context = ssl.create_default_context()
     with urlopen(req, timeout=timeout, context=context) as resp:
         return resp.read().decode("utf-8", errors="ignore")
+
+
+def fetch_json(url: str, timeout: int = 30, headers: Optional[Dict[str, str]] = None) -> dict:
+    req = Request(
+        url,
+        headers={
+            "User-Agent": "wireless-research-intel/0.1 (openalex)",
+            "Accept": "application/json",
+            **(headers or {}),
+        },
+    )
+    context = ssl.create_default_context()
+    with urlopen(req, timeout=timeout, context=context) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="ignore"))
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"' ")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def _text(el: Optional[ET.Element]) -> str:
@@ -356,6 +385,60 @@ def enrich_from_ieee_html(url: str) -> Tuple[Optional[str], List[str], List[str]
     return doi, authors, keywords, abstract
 
 
+def reconstruct_abstract(inv_index: Optional[dict]) -> Optional[str]:
+    if not inv_index:
+        return None
+    positions: Dict[int, str] = {}
+    for word, indices in inv_index.items():
+        if not isinstance(indices, list):
+            continue
+        for idx in indices:
+            if isinstance(idx, int):
+                positions[idx] = word
+    if not positions:
+        return None
+    words = [positions[i] for i in sorted(positions.keys())]
+    return " ".join(words)
+
+
+def enrich_from_openalex(doi: str, api_key: Optional[str], email: Optional[str]) -> Tuple[List[str], List[str], Optional[str]]:
+    if not api_key:
+        return [], [], None
+    doi_norm = doi.lower()
+    params = f"filter=doi:{doi_norm}&select=authorships,keywords,abstract_inverted_index"
+    url = f"https://api.openalex.org/works?{params}"
+    headers = {"api-key": api_key}
+    if email:
+        headers["From"] = email
+    try:
+        data = fetch_json(url, headers=headers)
+    except Exception:
+        return [], [], None
+    results = data.get("results") or []
+    if not results:
+        return [], [], None
+    work = results[0]
+    authors = []
+    for auth in work.get("authorships") or []:
+        author = auth.get("author") or {}
+        name = author.get("display_name")
+        if name:
+            authors.append(name)
+    keywords = []
+    for kw in work.get("keywords") or []:
+        name = kw.get("display_name")
+        if name:
+            keywords.append(name)
+    abstract = reconstruct_abstract(work.get("abstract_inverted_index"))
+
+    # De-dup
+    seen = set()
+    authors = [a for a in authors if not (a in seen or seen.add(a))]
+    seen = set()
+    keywords = [k for k in keywords if not (k in seen or seen.add(k))]
+    return authors, keywords, abstract
+
+
 def ingest_feed(feed: Feed, resource_dir: Path, since_date: Optional[str]) -> Tuple[int, int, int]:
     xml_bytes = fetch_xml(feed.url)
     items = parse_rss(xml_bytes)
@@ -422,6 +505,16 @@ def ingest_feed(feed: Feed, resource_dir: Path, since_date: Optional[str]) -> Tu
                 seen += 1
                 continue
 
+            api_key = os.getenv("OPENALEX_API_KEY")
+            email = os.getenv("OPENALEX_EMAIL")
+            oa_authors, oa_keywords, oa_abstract = enrich_from_openalex(doi, api_key, email)
+            if oa_authors:
+                authors = oa_authors
+            if oa_keywords:
+                keywords = oa_keywords
+            if oa_abstract and (not description or description.lower() == "null"):
+                description = oa_abstract
+
             record = {
                 "doi": doi,
                 "title": title,
@@ -477,6 +570,8 @@ def main() -> None:
         help="Convenience option to set --since to today minus N days.",
     )
     args = parser.parse_args()
+
+    load_env_file(Path("openalex.env"))
 
     feeds = load_sources(Path(args.sources))
     if not feeds:

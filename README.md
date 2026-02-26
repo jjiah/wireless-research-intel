@@ -38,6 +38,13 @@ Behavior:
 - Items without DOI are skipped
 - SQLite index is stored at `resource/index.sqlite` for fast dedupe/search (lean: no abstract)
 - If DOI is missing in RSS and the link is IEEE Xplore, the document page is scraped for DOI/authors/keywords
+- If `OPENALEX_API_KEY` is set, OpenAlex is used to enrich authors/keywords/abstract by DOI
+
+OpenAlex (optional):
+```powershell
+notepad openalex.env
+python ingest_rss.py --lookback-days 60
+```
 
 Time range:
 - First run (previous year): `python ingest_rss.py --lookback-days 365`
