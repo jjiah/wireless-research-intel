@@ -57,6 +57,12 @@ python manage_sources.py add --id myconf --name "My Conf" --type conference --pu
 python manage_sources.py remove myconf
 ```
 
+Auto-resolve OpenAlex source IDs:
+```powershell
+notepad openalex.env
+python resolve_openalex_ids.py
+```
+
 Time range:
 - First run (previous year): `python ingest_openalex.py --lookback-days 365`
 - Subsequent runs: `python ingest_openalex.py` (uses `resource/last_run.json`)

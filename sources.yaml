@@ -1,69 +1,69 @@
 version: 3
-updated_by: "codex"
+updated_by: "resolve_openalex_ids"
 notes: "OpenAlex-only ingestion. Populate openalex_source_id for each venue."
 venues:
   - id: ieee_twc
     name: "IEEE Transactions on Wireless Communications"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S63459445"
   - id: ieee_commmag
     name: "IEEE Communications Magazine"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S158797327"
   - id: ieee_cst
     name: "IEEE Communications Surveys & Tutorials"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S23688054"
   - id: ieee_jsac
     name: "IEEE Journal on Selected Areas in Communications"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S90422530"
   - id: ieee_jsasp
     name: "IEEE Journal of Selected Topics in Signal Processing"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S42167783"
   - id: ieee_tsp
     name: "IEEE Transactions on Signal Processing"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S168680287"
   - id: ieee_tvt
     name: "IEEE Transactions on Vehicular Technology"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S10936095"
   - id: ieee_tcom
     name: "IEEE Transactions on Communications"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S196647941"
   - id: ieee_icc
     name: "IEEE International Conference on Communications"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S4363608495"
   - id: ieee_globecom
     name: "IEEE Global Communications Conference"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S4363607712"
   - id: ieee_wcnc
     name: "IEEE Wireless Communications and Networking Conference"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S4363607776"
   - id: ieee_wcl
     name: "IEEE Wireless Communications Letters"
     type: "journal"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S2500830676"
   - id: ieee_vtc
     name: "IEEE Vehicular Technology Conference"
     type: "conference"
     publisher: "IEEE"
-    openalex_source_id: null
+    openalex_source_id: "S4210185404"
