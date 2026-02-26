@@ -21,7 +21,7 @@
 
 ## Trend Signals
 - **{{TOPIC}}:** ↑ rising — {{FIRST_HALF_COUNT}} papers in first half → {{SECOND_HALF_COUNT}} in second half
-- **{{TOPIC}}:** → stable across the period
+- **{{TOPIC}}:** → stable — {{FIRST_HALF_COUNT}} papers in first half → {{SECOND_HALF_COUNT}} in second half
 - **{{TOPIC}}:** ↓ declining — {{FIRST_HALF_COUNT}} → {{SECOND_HALF_COUNT}}
 
 *(List all notable trends; omit topics with flat counts)*
@@ -36,6 +36,8 @@
 | Topic | TWC | JSAC | TCOM | TSP | WCL | CommMag | ICC | GLOBECOM | TVT | VTC |
 |-------|-----|------|------|-----|-----|---------|-----|----------|-----|-----|
 | {{TOPIC}} | {{N}} | {{N}} | {{N}} | {{N}} | {{N}} | {{N}} | {{N}} | {{N}} | {{N}} | {{N}} |
+
+*(Use 0 for venues with no papers on this topic)*
 
 ## Suggested Reading
 - **{{TITLE}}** — {{VENUE}}, {{CITATIONS}} citations — *{{ONE_LINE_WHY_IT_MATTERS}}*
