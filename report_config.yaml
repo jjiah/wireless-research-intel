@@ -1,0 +1,5 @@
+report_dir: "E:\\0 notebook\\01 Resources"
+filename_template: "weekly-wireless-{week_start}.md"
+week_start_day: "sunday"
+timezone: "local"
+sources_file: "sources.yaml"
