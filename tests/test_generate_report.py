@@ -95,7 +95,7 @@ def test_truncate_long_abstract():
     text = " ".join(words)
     result = truncate_abstract(text, max_words=150)
     assert result.endswith("...")
-    assert len(result.split()) == 151  # 150 words + "..."
+    assert len(result.split()) == 150  # 150 words, last word has "..." appended
 
 
 # --- build_payload ---

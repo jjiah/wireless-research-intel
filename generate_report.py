@@ -53,7 +53,7 @@ def truncate_abstract(abstract: str, max_words: int = 150) -> str:
     words = abstract.split()
     if len(words) <= max_words:
         return abstract
-    return " ".join(words[:max_words]) + " ..."
+    return " ".join(words[:max_words]) + "..."
 
 
 def build_payload(papers: list[dict]) -> str:
