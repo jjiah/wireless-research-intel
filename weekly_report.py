@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -39,6 +40,20 @@ def load_config(path: Path) -> dict:
         key, value = line.split(":", 1)
         config[key.strip()] = _strip_quotes(value.strip())
     return config
+
+
+def load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"' ")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def load_source_names(path: Path) -> List[str]:
@@ -167,6 +182,7 @@ def main() -> None:
     parser.add_argument("--input", help="Optional .json or .csv file with records.")
     args = parser.parse_args()
 
+    load_env_file(Path("private.env"))
     config = load_config(Path(args.config))
     week_start_day = config.get("week_start_day", "sunday")
     today = parse_date(args.date) if args.date else date.today()
@@ -182,7 +198,10 @@ def main() -> None:
 
     report = render_report(week_start, week_end, date.today(), sources, records)
 
-    report_dir = Path(config["report_dir"])
+    report_dir_value = os.getenv("REPORT_DIR") or config.get("report_dir", "")
+    if not report_dir_value:
+        raise ValueError("Missing report_dir. Set REPORT_DIR in private.env.")
+    report_dir = Path(report_dir_value)
     report_dir.mkdir(parents=True, exist_ok=True)
     filename = config.get("filename_template", "weekly-wireless-{week_start}.md").format(
         week_start=week_start.isoformat(),

@@ -4,8 +4,8 @@ Venue-Based Weekly Research Observatory: Crawl metadata from authoritative wirel
 ## Weekly report output
 Reports are written to your Obsidian vault folder using `weekly_report.py` and `report_config.yaml`.
 
-Default config:
-- `report_dir`: `E:\0 notebook\01 Resources`
+Private config:
+- Set `REPORT_DIR` in `private.env` (kept out of git).
 - `filename_template`: `weekly-wireless-{week_start}.md`
 - `week_start_day`: `sunday`
 
@@ -24,12 +24,12 @@ Override week by date (any date inside the target week):
 python weekly_report.py --date 2026-02-22
 ```
 
-## Metadata ingestion
-Fetch new papers via RSS and store JSON metadata into per-venue folders under `resource/`.
+## Metadata ingestion (OpenAlex-only)
+Fetch new papers via OpenAlex and store JSON metadata into per-venue folders under `resource/`.
 
 Run:
 ```powershell
-python ingest_rss.py
+python ingest_openalex.py
 ```
 
 Behavior:
@@ -37,15 +37,26 @@ Behavior:
 - Existing DOI files are skipped
 - Items without DOI are skipped
 - SQLite index is stored at `resource/index.sqlite` for fast dedupe/search (lean: no abstract)
-- If DOI is missing in RSS and the link is IEEE Xplore, the document page is scraped for DOI/authors/keywords
-- If `OPENALEX_API_KEY` is set, OpenAlex is used to enrich authors/keywords/abstract by DOI
+- Only OpenAlex works with type `article` or `preprint` are saved (others are skipped)
 
-OpenAlex (optional):
+OpenAlex:
 ```powershell
 notepad openalex.env
-python ingest_rss.py --lookback-days 60
+python ingest_openalex.py --lookback-days 60
+```
+
+Sources:
+- Add `openalex_source_id` for each venue in `sources.yaml`.
+
+Manage sources:
+```powershell
+python manage_sources.py list
+python manage_sources.py show ieee_twc
+python manage_sources.py set-openalex ieee_twc S123456789
+python manage_sources.py add --id myconf --name "My Conf" --type conference --publisher IEEE
+python manage_sources.py remove myconf
 ```
 
 Time range:
-- First run (previous year): `python ingest_rss.py --lookback-days 365`
-- Subsequent runs: `python ingest_rss.py` (uses `resource/last_run.json`)
+- First run (previous year): `python ingest_openalex.py --lookback-days 365`
+- Subsequent runs: `python ingest_openalex.py` (uses `resource/last_run.json`)

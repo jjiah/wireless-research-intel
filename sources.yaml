@@ -1,162 +1,69 @@
-version: 2
+version: 3
 updated_by: "codex"
-notes: "RSS-first sources; IEEE journals via Xplore TOC feeds. Conferences via DBLP streams."
+notes: "OpenAlex-only ingestion. Populate openalex_source_id for each venue."
 venues:
   - id: ieee_twc
     name: "IEEE Transactions on Wireless Communications"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 7693
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC7693.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_commmag
     name: "IEEE Communications Magazine"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 35
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC35.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_cst
     name: "IEEE Communications Surveys & Tutorials"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 9739
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC9739.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_jsac
     name: "IEEE Journal on Selected Areas in Communications"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 49
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC49.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_jsasp
     name: "IEEE Journal of Selected Topics in Signal Processing"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 4200690
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC4200690.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_tsp
     name: "IEEE Transactions on Signal Processing"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 78
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC78.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_tvt
     name: "IEEE Transactions on Vehicular Technology"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 25
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC25.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_tcom
     name: "IEEE Transactions on Communications"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 26
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC26.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_icc
     name: "IEEE International Conference on Communications"
     type: "conference"
     publisher: "IEEE"
-    feeds:
-      - type: "dblp_stream_rss"
-        url: "https://dblp.org/feed/streams/conf/icc.rss"
-        includes: ["proceedings"]
+    openalex_source_id: null
   - id: ieee_globecom
     name: "IEEE Global Communications Conference"
     type: "conference"
     publisher: "IEEE"
-    feeds:
-      - type: "dblp_stream_rss"
-        url: "https://dblp.org/feed/streams/conf/globecom.rss"
-        includes: ["proceedings"]
+    openalex_source_id: null
   - id: ieee_wcnc
     name: "IEEE Wireless Communications and Networking Conference"
     type: "conference"
     publisher: "IEEE"
-    feeds:
-      - type: "dblp_stream_rss"
-        url: "https://dblp.org/feed/streams/conf/wcnc.rss"
-        includes: ["proceedings"]
+    openalex_source_id: null
   - id: ieee_wcl
     name: "IEEE Wireless Communications Letters"
     type: "journal"
     publisher: "IEEE"
-    ieee:
-      punumber: 5962382
-    feeds:
-      - type: "ieee_xplore_toc_rss"
-        url: "https://ieeexplore.ieee.org/rss/TOC5962382.XML"
-        includes: ["issue"]
-      - type: "early_access"
-        url: null
-        includes: ["early_access"]
-        status: "todo"
+    openalex_source_id: null
   - id: ieee_vtc
     name: "IEEE Vehicular Technology Conference"
     type: "conference"
     publisher: "IEEE"
-    feeds:
-      - type: "dblp_stream_rss"
-        url: "https://dblp.org/feed/streams/conf/vtc.rss"
-        includes: ["proceedings"]
+    openalex_source_id: null
