@@ -5,6 +5,7 @@ from pathlib import Path
 from generate_report import load_weeks, load_papers
 from generate_report import truncate_abstract, build_payload
 from generate_report import inject_wiki_links
+from generate_report import write_report
 
 
 def make_week(tmp_path: Path, name: str, papers: list[dict]) -> Path:
@@ -157,8 +158,6 @@ def test_inject_wiki_links_handles_multiple_topics():
     assert "[[Topic B]]" in result
     assert "[[Topic C]]" in result
 
-
-from generate_report import write_report
 
 
 # --- write_report ---
