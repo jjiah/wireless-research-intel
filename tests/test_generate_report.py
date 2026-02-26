@@ -4,6 +4,7 @@ import pytest
 from pathlib import Path
 from generate_report import load_weeks, load_papers
 from generate_report import truncate_abstract, build_payload
+from generate_report import inject_wiki_links
 
 
 def make_week(tmp_path: Path, name: str, papers: list[dict]) -> Path:
@@ -131,3 +132,27 @@ def test_build_payload_replaces_pipes_in_title():
     lines = result.strip().split("\n")
     fields = lines[0].split(" | ")
     assert "|" not in fields[0]  # title field has no stray pipes
+
+
+# --- inject_wiki_links ---
+
+def test_inject_wiki_links_wraps_topic_headings():
+    md = "### 1. Integrated Sensing and Communication\nsome content"
+    result = inject_wiki_links(md)
+    assert "### 1. [[Integrated Sensing and Communication]]" in result
+
+
+def test_inject_wiki_links_ignores_other_headings():
+    md = "## Summary\n### 1. My Topic\n## Trend Signals"
+    result = inject_wiki_links(md)
+    assert "## Summary" in result
+    assert "## Trend Signals" in result
+    assert "[[My Topic]]" in result
+
+
+def test_inject_wiki_links_handles_multiple_topics():
+    md = "### 1. Topic A\n### 2. Topic B\n### 3. Topic C"
+    result = inject_wiki_links(md)
+    assert "[[Topic A]]" in result
+    assert "[[Topic B]]" in result
+    assert "[[Topic C]]" in result

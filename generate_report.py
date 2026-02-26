@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import statistics
 from pathlib import Path
 
@@ -69,3 +70,8 @@ def build_payload(papers: list[dict]) -> str:
         )
         lines.append(f"{title} | {venue} | {week} | {citations} | {abstract}")
     return "\n".join(lines)
+
+
+def inject_wiki_links(markdown: str) -> str:
+    """Wrap topic headings (### N. Topic) in Obsidian [[wiki-links]]."""
+    return re.sub(r"(### \d+\.\s+)(.+)", r"\1[[\2]]", markdown)
