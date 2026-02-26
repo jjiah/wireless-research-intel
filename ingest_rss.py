@@ -13,9 +13,28 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 import sqlite3
+import ssl
 
 
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", re.IGNORECASE)
+ARNUM_RE = re.compile(r"/document/(\d+)/")
+META_KEYWORDS_RE = re.compile(
+    r'<meta[^>]+name=["\']keywords["\'][^>]+content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+META_DOI_RE = re.compile(
+    r'<meta[^>]+name=["\']citation_doi["\'][^>]+content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+META_AUTHOR_RE = re.compile(
+    r'<meta[^>]+name=["\']citation_author["\'][^>]+content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+META_ABSTRACT_RE = re.compile(
+    r'<meta[^>]+name=["\']citation_abstract["\'][^>]+content=["\']([^"\']+)["\']',
+    re.IGNORECASE,
+)
+GLOBAL_META_RE = re.compile(r"global\.document\.metadata\s*=\s*(\{.*?\});", re.DOTALL)
 
 
 @dataclass
@@ -70,8 +89,22 @@ def fetch_xml(url: str, timeout: int = 30) -> bytes:
             "Accept": "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8",
         },
     )
-    with urlopen(req, timeout=timeout) as resp:
+    context = ssl.create_default_context()
+    with urlopen(req, timeout=timeout, context=context) as resp:
         return resp.read()
+
+
+def fetch_text(url: str, timeout: int = 30) -> str:
+    req = Request(
+        url,
+        headers={
+            "User-Agent": "wireless-research-intel/0.1 (html-scrape)",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+    context = ssl.create_default_context()
+    with urlopen(req, timeout=timeout, context=context) as resp:
+        return resp.read().decode("utf-8", errors="ignore")
 
 
 def _text(el: Optional[ET.Element]) -> str:
@@ -239,6 +272,90 @@ def sanitize_doi(doi: str) -> str:
     return doi.replace("/", "_").replace(":", "_")
 
 
+def extract_arnumber(url: str) -> Optional[str]:
+    match = ARNUM_RE.search(url)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _json_loads_safe(text: str) -> Optional[dict]:
+    try:
+        return json.loads(text)
+    except Exception:
+        return None
+
+
+def _extract_from_global_metadata(html: str) -> Tuple[Optional[str], List[str], List[str], Optional[str]]:
+    match = GLOBAL_META_RE.search(html)
+    if not match:
+        return None, [], [], None
+    meta = _json_loads_safe(match.group(1))
+    if not isinstance(meta, dict):
+        return None, [], [], None
+
+    doi = meta.get("doi")
+    abstract = meta.get("abstract")
+
+    authors = []
+    for author in meta.get("authors", []) or []:
+        if isinstance(author, dict):
+            name = author.get("fullName") or author.get("name")
+            if name:
+                authors.append(name)
+        elif isinstance(author, str):
+            authors.append(author)
+
+    keywords = []
+    for block in meta.get("keywords", []) or []:
+        if isinstance(block, dict):
+            for kw in block.get("kwd", []) or []:
+                if kw:
+                    keywords.append(kw)
+
+    return doi, authors, keywords, abstract
+
+
+def enrich_from_ieee_html(url: str) -> Tuple[Optional[str], List[str], List[str], Optional[str]]:
+    try:
+        html = fetch_text(url)
+    except Exception:
+        return None, [], [], None
+
+    doi = None
+    meta_doi = META_DOI_RE.search(html)
+    if meta_doi:
+        doi = meta_doi.group(1).strip().lower()
+    if not doi:
+        doi = find_doi([html])
+
+    authors = [m.group(1).strip() for m in META_AUTHOR_RE.finditer(html)]
+    keywords = []
+    meta_kw = META_KEYWORDS_RE.search(html)
+    if meta_kw:
+        keywords = [k.strip() for k in meta_kw.group(1).split(",") if k.strip()]
+    meta_abs = META_ABSTRACT_RE.search(html)
+    abstract = meta_abs.group(1).strip() if meta_abs else None
+
+    if not doi or not authors or not keywords or not abstract:
+        doi2, authors2, keywords2, abstract2 = _extract_from_global_metadata(html)
+        if not doi and doi2:
+            doi = doi2
+        if not authors and authors2:
+            authors = authors2
+        if not keywords and keywords2:
+            keywords = keywords2
+        if not abstract and abstract2:
+            abstract = abstract2
+
+    # De-dup
+    seen = set()
+    authors = [a for a in authors if not (a in seen or seen.add(a))]
+    seen = set()
+    keywords = [k for k in keywords if not (k in seen or seen.add(k))]
+    return doi, authors, keywords, abstract
+
+
 def ingest_feed(feed: Feed, resource_dir: Path, since_date: Optional[str]) -> Tuple[int, int, int]:
     xml_bytes = fetch_xml(feed.url)
     items = parse_rss(xml_bytes)
@@ -276,6 +393,16 @@ def ingest_feed(feed: Feed, resource_dir: Path, since_date: Optional[str]) -> Tu
                 if published < since_date:
                     continue
             doi = find_doi([title, link, description] + texts)
+            if not doi and link and "ieeexplore.ieee.org" in link:
+                doi_html, authors_html, keywords_html, abstract_html = enrich_from_ieee_html(link)
+                if doi_html:
+                    doi = doi_html
+                if authors_html:
+                    authors = authors_html
+                if keywords_html:
+                    keywords = keywords_html
+                if abstract_html and (not description or description.lower() == "null"):
+                    description = abstract_html
             if not doi:
                 skipped_no_doi += 1
                 continue

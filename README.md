@@ -37,6 +37,7 @@ Behavior:
 - Existing DOI files are skipped
 - Items without DOI are skipped
 - SQLite index is stored at `resource/index.sqlite` for fast dedupe/search (lean: no abstract)
+- If DOI is missing in RSS and the link is IEEE Xplore, the document page is scraped for DOI/authors/keywords
 
 Time range:
 - First run (previous year): `python ingest_rss.py --lookback-days 365`
