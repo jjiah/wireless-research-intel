@@ -77,8 +77,13 @@ def build_payload(papers: list[dict]) -> str:
 
 
 def inject_wiki_links(markdown: str) -> str:
-    """Wrap topic headings (### N. Topic) in Obsidian [[wiki-links]]."""
-    return re.sub(r"(### \d+\.\s+)(?!\[\[)(.+)", r"\1[[\2]]", markdown)
+    """Wrap topic headings and any remaining quoted paper titles in Obsidian [[wiki-links]]."""
+    # Wrap topic headings: ### N. Topic → ### N. [[Topic]]
+    result = re.sub(r"(### \d+\.\s+)(?!\[\[)(.+)", r"\1[[\2]]", markdown)
+    # Fallback: convert any remaining "Quoted Title" → [[Quoted Title]]
+    # (catches paper titles the LLM didn't auto-link)
+    result = re.sub(r'"([^"\n]{10,})"', r'[[\1]]', result)
+    return result
 
 
 def write_report(content: str, output_dir: Path, date_str: str) -> Path:
@@ -118,7 +123,11 @@ def call_llm(payload: str, template: str, weeks: int, api_key: str) -> str:
         "- Trend signals: compare paper counts in the first half vs second half of the window\n"
         "- Research gaps: areas adjacent to hot topics with few or no papers\n"
         "- Suggested reading: highest cited_by_count papers with specific one-line rationale\n"
-        "- Output plain Markdown only; do not add [[wiki-links]] (added in post-processing)\n"
+        "- Output plain Markdown only\n"
+        "- Add [[wiki-links]] (Obsidian format) as follows:\n"
+        "  * Paper titles in 'Representative papers' and 'Suggested Reading': use [[Paper Title]] format (no quotes)\n"
+        "  * Key technical terms in body text: wrap important concepts e.g. [[ISAC]], [[Beamforming]], [[RIS]], [[MIMO]]\n"
+        "  * Do NOT add [[wiki-links]] to section headings (## or ###) — those are handled separately\n"
         "- Replace all {{PLACEHOLDERS}} with real content from the papers"
     )
 

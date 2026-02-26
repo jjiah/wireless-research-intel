@@ -159,6 +159,21 @@ def test_inject_wiki_links_handles_multiple_topics():
     assert "[[Topic C]]" in result
 
 
+def test_inject_wiki_links_wraps_quoted_paper_titles():
+    md = '- **Representative papers:** "Deep Learning for Beamforming in mmWave" (TWC, 8 citations)'
+    result = inject_wiki_links(md)
+    assert "[[Deep Learning for Beamforming in mmWave]]" in result
+    assert '"Deep Learning for Beamforming in mmWave"' not in result
+
+
+def test_inject_wiki_links_ignores_short_quoted_strings():
+    # Short quoted strings (< 10 chars) should not be wrapped
+    md = 'The method is "optimal" in this case.'
+    result = inject_wiki_links(md)
+    assert '"optimal"' in result
+    assert "[[optimal]]" not in result
+
+
 
 # --- write_report ---
 
