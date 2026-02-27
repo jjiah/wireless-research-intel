@@ -253,7 +253,7 @@ def run_stream():
                     ).get("last_run_date")
                 except Exception:
                     pass
-            floor_date = private.get("INGEST_SINCE_DATE", "").strip()
+            floor_date = private.get("INGEST_SINCE_DATE", "2024-01-01").strip() or "2024-01-01"
             if floor_date and (since_date is None or since_date < floor_date):
                 since_date = floor_date
 

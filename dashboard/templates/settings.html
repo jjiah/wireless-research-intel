@@ -43,7 +43,7 @@
     <label class="form-label fw-semibold">INGEST_SINCE_DATE</label>
     <input type="date" class="form-control" style="max-width:12rem"
            name="INGEST_SINCE_DATE"
-           value="{{ private.get('INGEST_SINCE_DATE', '') }}"
+           value="{{ private.get('INGEST_SINCE_DATE', '2024-01-01') }}"
            placeholder="2024-01-01">
     <div class="form-text">
       Floor date for ingestion. On first run (no history yet) the pipeline fetches
