@@ -147,7 +147,7 @@ Put your key in `private.env` (already git-ignored):
 
 ```env
 SILICONFLOW_API_KEY=your_key_here
-SILICONFLOW_BASE_URL=https://api.siliconflow.com/v1
+SILICONFLOW_BASE_URL=https://api.siliconflow.cn/v1
 SILICONFLOW_MODEL=deepseek-ai/DeepSeek-OCR
 ```
 
@@ -168,7 +168,7 @@ python pdf_to_markdown.py `
 Defaults:
 - Output root: `resource/pdf_markdown`
 - Model: `deepseek-ai/DeepSeek-OCR`
-- Base URL: `https://api.siliconflow.com/v1`
+- Base URL: `https://api.siliconflow.cn/v1`
 
 ### Large PDFs
 
