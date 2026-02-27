@@ -88,7 +88,7 @@ To run the full pipeline (ingest + report) automatically every Monday at 08:00:
 
 1. Open **Task Scheduler** (search in Start menu).
 2. Open `automation/weekly_digest.xml` in a text editor and replace the two
-   `E:\59357\...` path values with your actual repo path (in `<Command>` and `<WorkingDirectory>`).
+   placeholder path values with your actual repo path (in `<Command>` and `<WorkingDirectory>`).
 3. Click **Action → Import Task…**
 4. Select the edited `automation/weekly_digest.xml`.
 5. The task appears under `\wireless-research-intel\weekly-digest`.
@@ -160,6 +160,7 @@ python pdf_to_markdown.py `
   --input path\to\paper.pdf `
   --output resource\pdf_markdown\paper.md `
   --chunk-pages 30 `
+  --min-chars-per-page 160 `
   --resume `
   --max-retries 3 `
   --timeout-seconds 120
@@ -175,6 +176,10 @@ Defaults:
 The script starts with page-based chunks (`--chunk-pages`) and automatically
 splits failed oversized chunks into smaller ranges until they succeed (or reach
 single-page chunks).
+
+It also includes an incomplete-output heuristic for multi-page chunks. If a
+chunk returns suspiciously short content for its page span, the script
+automatically re-splits that chunk and retries on smaller ranges.
 
 ### Resume interrupted runs
 
@@ -201,4 +206,6 @@ Includes:
 
 - `Missing SILICONFLOW_API_KEY`: set key in `private.env` or process environment.
 - Repeated payload/context errors: lower `--chunk-pages`.
+- Missing content from large chunks: rerun with `--chunk-pages 1` (safest),
+  or lower `--min-chars-per-page` if your document is very image-heavy.
 - Rate limit or transient API failures: use `--resume` to continue after retry window.

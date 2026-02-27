@@ -25,8 +25,8 @@
   </Settings>
   <Actions Context="Author">
     <Exec>
-      <Command>E:\59357\Documents\GitHub\wireless-research-intel\run_pipeline.bat</Command>
-      <WorkingDirectory>E:\59357\Documents\GitHub\wireless-research-intel</WorkingDirectory>
+      <Command>C:\path\to\wireless-research-intel\run_pipeline.bat</Command>
+      <WorkingDirectory>C:\path\to\wireless-research-intel</WorkingDirectory>
     </Exec>
   </Actions>
   <Principals>

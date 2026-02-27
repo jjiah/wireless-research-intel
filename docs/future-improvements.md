@@ -42,7 +42,7 @@ Schedule weekly on Monday morning.
 
 **Option B — Simple batch script:**
 ```bat
-cd E:\59357\Documents\GitHub\wireless-research-intel
+cd C:\path\to\wireless-research-intel
 python ingest_openalex.py
 python generate_report.py --weeks 4
 ```
@@ -71,7 +71,7 @@ if daily_note.exists():
         f.write(f"\n- [[{date_str}-wireless-digest]] — weekly research digest\n")
 ```
 
-**Config:** add `DAILY_NOTES_DIR=E:\0 notebook\00 Daily Notes` to `private.env`
+**Config:** add `DAILY_NOTES_DIR=C:\path\to\your\obsidian\daily-notes` to `private.env`
 
 ---
 
