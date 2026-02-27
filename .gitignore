@@ -1,3 +1,4 @@
 openalex.env
 resource/
 private.env
+logs/
