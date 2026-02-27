@@ -12,6 +12,7 @@ import os
 import subprocess
 import sys
 import threading
+from datetime import date, timedelta
 from pathlib import Path
 
 from flask import (
@@ -160,7 +161,7 @@ def index():
 
 # ── settings ──────────────────────────────────────────────────────────────────
 
-_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "REPORT_WEEKS", "INGEST_SINCE_DATE", "REPORT_DIR")
+_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "INGEST_WEEKS", "REPORT_WEEKS", "INGEST_SINCE_DATE", "REPORT_DIR")
 _OPENALEX_KEYS = ("OPENALEX_API_KEY", "OPENALEX_EMAIL")
 
 
@@ -223,76 +224,102 @@ def venues_remove(venue_id: str):
     return redirect(url_for("venues"))
 # ── run pipeline ──────────────────────────────────────────────────────────────
 
+def _build_ingest_cmd(private: dict) -> list[str]:
+    """Build ingest_openalex.py command. Uses last_run.json when available,
+    falls back to INGEST_WEEKS weeks back, bounded by INGEST_SINCE_DATE floor."""
+    ingest_weeks_str = private.get("INGEST_WEEKS", "8").strip()
+    ingest_weeks = int(ingest_weeks_str) if ingest_weeks_str.isdigit() and int(ingest_weeks_str) > 0 else 8
+
+    since_date = None
+    last_run_path = REPO_DIR / "resource" / "last_run.json"
+    if last_run_path.exists():
+        try:
+            since_date = json.loads(
+                last_run_path.read_text(encoding="utf-8")
+            ).get("last_run_date")
+        except Exception:
+            pass
+
+    weeks_since = (date.today() - timedelta(weeks=ingest_weeks)).isoformat()
+    if since_date is None or since_date < weeks_since:
+        since_date = weeks_since
+
+    floor_date = private.get("INGEST_SINCE_DATE", "2024-01-01").strip() or "2024-01-01"
+    if since_date < floor_date:
+        since_date = floor_date
+
+    return [sys.executable, str(REPO_DIR / "ingest_openalex.py"), "--since", since_date]
+
+
+def _build_report_cmd(private: dict) -> list[str]:
+    """Build generate_report.py command using REPORT_WEEKS setting."""
+    weeks_str = private.get("REPORT_WEEKS", "4").strip()
+    weeks = int(weeks_str) if weeks_str.isdigit() and int(weeks_str) > 0 else 4
+    return [sys.executable, str(REPO_DIR / "generate_report.py"), "--weeks", str(weeks)]
+
+
+def _run_cmds_generator(cmds: list[list[str]]):
+    """Generator: acquire pipeline lock, stream each command's output as SSE."""
+    global _pipeline_running
+    with _pipeline_lock:
+        if _pipeline_running:
+            yield "data: [Pipeline already running. Refresh and try again.]\n\n"
+            return
+        _pipeline_running = True
+    try:
+        for script_args in cmds:
+            name = Path(script_args[1]).name
+            yield f"data: Running {name}...\n\n"
+            proc = subprocess.Popen(
+                script_args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                cwd=str(REPO_DIR),
+            )
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                yield f"data: {line.rstrip()}\n\n"
+            proc.wait()
+            if proc.returncode != 0:
+                yield f"data: ERROR: {name} exited with code {proc.returncode}\n\n"
+                yield "data: [DONE:FAILED]\n\n"
+                return
+            yield f"data: {name} completed successfully.\n\n"
+        yield "data: [DONE:OK]\n\n"
+    finally:
+        _pipeline_running = False
+
+
+def _sse_response(cmds: list[list[str]]) -> Response:
+    return Response(
+        stream_with_context(_run_cmds_generator(cmds)),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.route("/run")
 def run_page():
     return render_template("run.html", running=_pipeline_running)
 
 
+@app.route("/run/ingest/stream")
+def run_ingest_stream():
+    private = load_env_file(PRIVATE_ENV_PATH)
+    return _sse_response([_build_ingest_cmd(private)])
+
+
+@app.route("/run/report/stream")
+def run_report_stream():
+    private = load_env_file(PRIVATE_ENV_PATH)
+    return _sse_response([_build_report_cmd(private)])
+
+
 @app.route("/run/stream")
 def run_stream():
-    def generate():
-        global _pipeline_running
-        with _pipeline_lock:
-            if _pipeline_running:
-                yield "data: [Pipeline already running. Refresh and try again.]\n\n"
-                return
-            _pipeline_running = True
-        try:
-            private = load_env_file(PRIVATE_ENV_PATH)
-            weeks_str = private.get("REPORT_WEEKS", "4").strip()
-            weeks = int(weeks_str) if weeks_str.isdigit() and int(weeks_str) > 0 else 4
-
-            # Determine since_date: use last_run.json if it exists, else fall back
-            # to the configured floor date. Either way the fetch is always bounded.
-            since_date = None
-            last_run_path = REPO_DIR / "resource" / "last_run.json"
-            if last_run_path.exists():
-                try:
-                    since_date = json.loads(
-                        last_run_path.read_text(encoding="utf-8")
-                    ).get("last_run_date")
-                except Exception:
-                    pass
-            floor_date = private.get("INGEST_SINCE_DATE", "2024-01-01").strip() or "2024-01-01"
-            if floor_date and (since_date is None or since_date < floor_date):
-                since_date = floor_date
-
-            ingest_cmd = [sys.executable, str(REPO_DIR / "ingest_openalex.py")]
-            if since_date:
-                ingest_cmd += ["--since", since_date]
-            scripts = [
-                ingest_cmd,
-                [sys.executable, str(REPO_DIR / "generate_report.py"),
-                 "--weeks", str(weeks)],
-            ]
-            for script_args in scripts:
-                name = Path(script_args[1]).name
-                yield f"data: Running {name}...\n\n"
-                proc = subprocess.Popen(
-                    script_args,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    cwd=str(REPO_DIR),
-                )
-                assert proc.stdout is not None
-                for line in proc.stdout:
-                    yield f"data: {line.rstrip()}\n\n"
-                proc.wait()
-                if proc.returncode != 0:
-                    yield f"data: ERROR: {name} exited with code {proc.returncode}\n\n"
-                    yield "data: [DONE:FAILED]\n\n"
-                    return
-                yield f"data: {name} completed successfully.\n\n"
-            yield "data: [DONE:OK]\n\n"
-        finally:
-            _pipeline_running = False
-
-    return Response(
-        stream_with_context(generate()),
-        content_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    private = load_env_file(PRIVATE_ENV_PATH)
+    return _sse_response([_build_ingest_cmd(private), _build_report_cmd(private)])
 
 
 if __name__ == "__main__":

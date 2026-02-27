@@ -68,6 +68,7 @@ def test_settings_save_writes_env_files(client, app_tmp):
     resp = client.post("/settings/save", data={
         "SILICONFLOW_API_KEY": "new-key",
         "SILICONFLOW_MODEL": "Pro/zai-org/GLM-5",
+        "INGEST_WEEKS": "8",
         "REPORT_WEEKS": "6",
         "INGEST_SINCE_DATE": "2024-01-01",
         "REPORT_DIR": "C:\\new-reports",
@@ -79,7 +80,8 @@ def test_settings_save_writes_env_files(client, app_tmp):
     openalex = (app_tmp / "openalex.env").read_text(encoding="utf-8")
     assert "new-key" in private
     assert "Pro/zai-org/GLM-5" in private
-    assert "6" in private
+    assert "INGEST_WEEKS=8" in private
+    assert "REPORT_WEEKS=6" in private
     assert "2024-01-01" in private
     assert "C:\\new-reports" in private
     assert "oalex-key" in openalex
@@ -151,19 +153,35 @@ def test_run_page_returns_200(client):
     assert resp.status_code == 200
 
 
-def test_run_stream_content_type(client, monkeypatch):
-    """SSE endpoint returns text/event-stream."""
+def _mock_popen(monkeypatch):
     import dashboard
-
     class MockProc:
         def __init__(self):
             self.stdout = iter([])
             self.returncode = 0
         def wait(self):
             pass
-
     monkeypatch.setattr(dashboard.subprocess, "Popen", lambda *a, **k: MockProc())
+
+
+def test_run_stream_content_type(client, monkeypatch):
+    """SSE endpoint returns text/event-stream."""
+    _mock_popen(monkeypatch)
     resp = client.get("/run/stream")
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.content_type
+
+
+def test_run_ingest_stream_content_type(client, monkeypatch):
+    _mock_popen(monkeypatch)
+    resp = client.get("/run/ingest/stream")
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.content_type
+
+
+def test_run_report_stream_content_type(client, monkeypatch):
+    _mock_popen(monkeypatch)
+    resp = client.get("/run/report/stream")
     assert resp.status_code == 200
     assert "text/event-stream" in resp.content_type
 

@@ -31,6 +31,18 @@
   </div>
 
   <div class="mb-3">
+    <label class="form-label fw-semibold">INGEST_WEEKS</label>
+    <input type="number" class="form-control" style="max-width:12rem"
+           name="INGEST_WEEKS"
+           value="{{ private.get('INGEST_WEEKS', '8') }}"
+           min="1" max="52" placeholder="8">
+    <div class="form-text">
+      How many weeks back to fetch from OpenAlex when no previous run exists.
+      On subsequent runs the last-run watermark is used instead. Default: 8.
+    </div>
+  </div>
+
+  <div class="mb-3">
     <label class="form-label fw-semibold">REPORT_WEEKS</label>
     <input type="number" class="form-control" style="max-width:12rem"
            name="REPORT_WEEKS"

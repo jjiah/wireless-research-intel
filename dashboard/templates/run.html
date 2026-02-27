@@ -2,17 +2,21 @@
 {% block title %}Run Pipeline — Wireless Intel{% endblock %}
 {% block content %}
 <h2>Run Pipeline</h2>
-<p class="text-muted">
-  Runs <code>ingest_openalex.py</code> then
-  <code>generate_report.py --weeks 4</code> and streams live output.
-</p>
 
 {% if running %}
-  <div class="alert alert-warning">Pipeline is currently running. Try again in a moment.</div>
+  <div class="alert alert-warning">A process is already running. Refresh to check status.</div>
 {% else %}
-  <button id="startBtn" class="btn btn-success btn-lg" onclick="startPipeline()">
-    Start Pipeline
-  </button>
+  <div class="d-flex gap-2 mb-3 flex-wrap">
+    <button class="btn btn-outline-primary run-btn" data-url="/run/ingest/stream">
+      ▶ Run Ingest
+    </button>
+    <button class="btn btn-outline-success run-btn" data-url="/run/report/stream">
+      ▶ Generate Report
+    </button>
+    <button class="btn btn-primary run-btn" data-url="/run/stream">
+      ▶ Run Both
+    </button>
+  </div>
 {% endif %}
 
 <pre id="log"
@@ -22,44 +26,48 @@
 <div id="statusMsg" class="mt-2 fw-semibold"></div>
 
 <script>
-function startPipeline() {
-  const btn = document.getElementById('startBtn');
-  const log = document.getElementById('log');
-  const msg = document.getElementById('statusMsg');
+document.querySelectorAll('.run-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var allBtns = document.querySelectorAll('.run-btn');
+    allBtns.forEach(function(b) { b.disabled = true; });
+    btn.textContent = '⏳ Running…';
 
-  btn.disabled = true;
-  btn.textContent = 'Running...';
-  log.style.display = 'block';
-  log.textContent = '';
-  msg.textContent = '';
+    var log = document.getElementById('log');
+    var msg = document.getElementById('statusMsg');
+    log.textContent = '';
+    log.style.display = 'block';
+    msg.textContent = '';
 
-  const es = new EventSource('/run/stream');
+    var es = new EventSource(btn.dataset.url);
 
-  es.onmessage = function(e) {
-    if (e.data === '[DONE:OK]') {
+    es.onmessage = function(e) {
+      if (e.data === '[DONE:OK]') {
+        es.close();
+        msg.innerHTML = '<span class="text-success">Completed successfully.</span>';
+        btn.textContent = btn.dataset.url.includes('ingest') ? '▶ Run Ingest'
+                        : btn.dataset.url.includes('report') ? '▶ Generate Report'
+                        : '▶ Run Both';
+        allBtns.forEach(function(b) { b.disabled = false; });
+        return;
+      }
+      if (e.data === '[DONE:FAILED]') {
+        es.close();
+        msg.innerHTML = '<span class="text-danger">Failed. See log above.</span>';
+        btn.textContent = 'Retry';
+        allBtns.forEach(function(b) { b.disabled = false; });
+        return;
+      }
+      log.textContent += e.data + '\n';
+      log.scrollTop = log.scrollHeight;
+    };
+
+    es.onerror = function() {
       es.close();
-      msg.innerHTML = '<span class="text-success">Pipeline completed successfully.</span>';
-      btn.textContent = 'Run Again';
-      btn.disabled = false;
-      return;
-    }
-    if (e.data === '[DONE:FAILED]') {
-      es.close();
-      msg.innerHTML = '<span class="text-danger">Pipeline failed. See log above.</span>';
+      msg.innerHTML = '<span class="text-danger">Connection lost.</span>';
       btn.textContent = 'Retry';
-      btn.disabled = false;
-      return;
-    }
-    log.textContent += e.data + '\n';
-    log.scrollTop = log.scrollHeight;
-  };
-
-  es.onerror = function() {
-    es.close();
-    msg.innerHTML = '<span class="text-danger">Connection lost.</span>';
-    btn.textContent = 'Retry';
-    btn.disabled = false;
-  };
-}
+      allBtns.forEach(function(b) { b.disabled = false; });
+    };
+  });
+});
 </script>
 {% endblock %}
