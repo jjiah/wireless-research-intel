@@ -70,7 +70,7 @@ def build_payload(papers: list[dict]) -> str:
         week = (p.get("published") or "")[:7]  # YYYY-MM
         citations = p.get("cited_by_count") or 0
         abstract = truncate_abstract(
-            (p.get("abstract") or "").replace("|", "/"), max_words=300
+            (p.get("abstract") or "").replace("|", "/")
         )
         lines.append(f"{title} | {venue} | {week} | {citations} | {abstract}")
     return "\n".join(lines)
