@@ -7,16 +7,20 @@ import os
 import re
 import statistics
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
 def load_weeks(weeks_dir: Path, n: int) -> list[Path]:
-    """Return the last n week directories, sorted by name."""
+    """Return week directories whose start date falls within the last n weeks."""
     if not weeks_dir.exists():
         return []
-    dirs = sorted([d for d in weeks_dir.iterdir() if d.is_dir()])
-    return dirs[-n:] if len(dirs) >= n else dirs
+    cutoff = (date.today() - timedelta(weeks=n)).isoformat()
+    dirs = sorted(
+        d for d in weeks_dir.iterdir()
+        if d.is_dir() and d.name >= cutoff
+    )
+    return dirs
 
 
 def load_papers(

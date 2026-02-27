@@ -2,6 +2,7 @@
 import json
 import pytest
 from pathlib import Path
+from datetime import date, timedelta
 from generate_report import load_weeks, load_papers
 from generate_report import truncate_abstract, build_payload
 from generate_report import inject_wiki_links
@@ -33,21 +34,29 @@ def sample_paper(cited: int = 10) -> dict:
 
 # --- load_weeks ---
 
-def test_load_weeks_returns_last_n(tmp_path):
+def test_load_weeks_returns_folders_within_window(tmp_path):
     weeks_dir = tmp_path / "by_publication_week"
     weeks_dir.mkdir()
-    for name in ["2025-01-06", "2025-01-13", "2025-01-20", "2025-01-27"]:
+    today = date.today()
+    recent = (today - timedelta(weeks=1)).isoformat()
+    older_but_inside = (today - timedelta(weeks=3)).isoformat()
+    outside = (today - timedelta(weeks=5)).isoformat()
+    for name in [outside, older_but_inside, recent]:
         (weeks_dir / name).mkdir()
-    result = load_weeks(weeks_dir, n=2)
-    assert [d.name for d in result] == ["2025-01-20", "2025-01-27"]
+    result = load_weeks(weeks_dir, n=4)
+    names = [d.name for d in result]
+    assert recent in names
+    assert older_but_inside in names
+    assert outside not in names
 
 
-def test_load_weeks_returns_all_if_fewer_than_n(tmp_path):
+def test_load_weeks_excludes_folders_older_than_window(tmp_path):
     weeks_dir = tmp_path / "by_publication_week"
     weeks_dir.mkdir()
-    (weeks_dir / "2025-01-06").mkdir()
+    old = (date.today() - timedelta(weeks=10)).isoformat()
+    (weeks_dir / old).mkdir()
     result = load_weeks(weeks_dir, n=4)
-    assert len(result) == 1
+    assert result == []
 
 
 def test_load_weeks_returns_empty_if_dir_missing(tmp_path):
