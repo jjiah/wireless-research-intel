@@ -31,6 +31,15 @@
   </div>
 
   <div class="mb-3">
+    <label class="form-label fw-semibold">INGEST_LOOKBACK_DAYS</label>
+    <input type="number" class="form-control" style="max-width:12rem"
+           name="INGEST_LOOKBACK_DAYS"
+           value="{{ private.get('INGEST_LOOKBACK_DAYS', '30') }}"
+           min="1" max="3650" placeholder="30">
+    <div class="form-text">How many days back to fetch when running the pipeline. Default: 30.</div>
+  </div>
+
+  <div class="mb-3">
     <label class="form-label fw-semibold">REPORT_DIR</label>
     <input type="text" class="form-control font-monospace"
            name="REPORT_DIR"

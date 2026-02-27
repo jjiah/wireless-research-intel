@@ -68,6 +68,7 @@ def test_settings_save_writes_env_files(client, app_tmp):
     resp = client.post("/settings/save", data={
         "SILICONFLOW_API_KEY": "new-key",
         "SILICONFLOW_MODEL": "Pro/zai-org/GLM-5",
+        "INGEST_LOOKBACK_DAYS": "14",
         "REPORT_DIR": "C:\\new-reports",
         "OPENALEX_API_KEY": "oalex-key",
         "OPENALEX_EMAIL": "user@example.com",
@@ -77,6 +78,7 @@ def test_settings_save_writes_env_files(client, app_tmp):
     openalex = (app_tmp / "openalex.env").read_text(encoding="utf-8")
     assert "new-key" in private
     assert "Pro/zai-org/GLM-5" in private
+    assert "14" in private
     assert "C:\\new-reports" in private
     assert "oalex-key" in openalex
     assert "user@example.com" in openalex
