@@ -31,7 +31,7 @@
   </Actions>
   <Principals>
     <Principal id="Author">
-      <LogonType>Password</LogonType>
+      <LogonType>InteractiveToken</LogonType>
       <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>

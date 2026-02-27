@@ -91,10 +91,10 @@ To run the full pipeline (ingest + report) automatically every Monday at 08:00:
    `E:\59357\...` path values with your actual repo path (in `<Command>` and `<WorkingDirectory>`).
 3. Click **Action → Import Task…**
 4. Select the edited `automation/weekly_digest.xml`.
-5. Enter your Windows account password when prompted.
-6. The task appears under `\wireless-research-intel\weekly-digest`.
+5. The task appears under `\wireless-research-intel\weekly-digest`.
 
-If your computer is off at 08:00, the task runs on next startup (requires network).
+> **Note:** No password is stored. The task runs only while you are logged in — you are fully in control.
+> If Monday 08:00 passes while you are logged in but the task hasn't run yet, it will run on your next login (requires network).
 
 To run manually at any time:
 
