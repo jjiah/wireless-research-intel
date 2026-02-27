@@ -86,6 +86,31 @@ def inject_wiki_links(markdown: str) -> str:
     return result
 
 
+def load_topic_registry(path: Path) -> list[str]:
+    """Return saved topic names from topic_registry.json, or [] if absent/corrupt."""
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("topics") or []
+    except Exception:
+        return []
+
+
+def extract_topics_from_markdown(markdown: str) -> list[str]:
+    """Parse topic names from ### N. [[Topic]] headings in LLM output."""
+    return re.findall(r"### \d+\.\s+\[\[(.+?)\]\]", markdown)
+
+
+def update_topic_registry(path: Path, new_topics: list[str]) -> None:
+    """Merge new_topics into registry JSON (exact-string dedup, order-preserving)."""
+    existing = load_topic_registry(path)
+    merged = list(dict.fromkeys(existing + new_topics))
+    data = {"topics": merged, "updated": datetime.now().strftime("%Y-%m-%d")}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def write_report(content: str, output_dir: Path, date_str: str) -> Path:
     """Write the report Markdown to output_dir/YYYY-MM-DD-wireless-digest.md."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -94,7 +119,7 @@ def write_report(content: str, output_dir: Path, date_str: str) -> Path:
     return path
 
 
-def call_llm(payload: str, template: str, weeks: int, api_key: str) -> str:
+def call_llm(payload: str, template: str, weeks: int, api_key: str, preferred_topics: list[str] | None = None) -> str:
     """Call SiliconFlow GLM-5 with the paper payload and return Markdown."""
     from openai import OpenAI
 
@@ -129,6 +154,11 @@ def call_llm(payload: str, template: str, weeks: int, api_key: str) -> str:
         "  * Key technical terms in body text: wrap important concepts e.g. [[ISAC]], [[Beamforming]], [[RIS]], [[MIMO]]\n"
         "  * Do NOT add [[wiki-links]] to section headings (## or ###) — those are handled separately\n"
         "- Replace all {{PLACEHOLDERS}} with real content from the papers"
+        + (
+            f"\n- Prefer these previously used topic names when appropriate: {', '.join(preferred_topics)}"
+            if preferred_topics
+            else ""
+        )
     )
 
     response = client.chat.completions.create(
@@ -178,6 +208,10 @@ def main() -> None:
 
     resource_dir = Path(args.resource_dir)
     weeks_dir = resource_dir / "by_publication_week"
+    registry_path = resource_dir / "topic_registry.json"
+    preferred_topics = load_topic_registry(registry_path)
+    if preferred_topics:
+        print(f"  Using {len(preferred_topics)} preferred topic names from registry")
 
     print(f"Loading last {args.weeks} weeks from {weeks_dir}...")
     week_dirs = load_weeks(weeks_dir, args.weeks)
@@ -203,9 +237,14 @@ def main() -> None:
     template = template_path.read_text(encoding="utf-8")
 
     print("Calling SiliconFlow GLM-5...")
-    markdown = call_llm(payload, template, args.weeks, api_key)
+    markdown = call_llm(payload, template, args.weeks, api_key, preferred_topics or None)
 
     markdown = inject_wiki_links(markdown)
+
+    new_topics = extract_topics_from_markdown(markdown)
+    if new_topics:
+        update_topic_registry(registry_path, new_topics)
+        print(f"  Topic registry updated ({len(new_topics)} topics found)")
 
     date_str = datetime.now().strftime("%Y-%m-%d")
     out_path = write_report(markdown, report_dir, date_str)

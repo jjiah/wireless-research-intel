@@ -6,6 +6,11 @@ from generate_report import load_weeks, load_papers
 from generate_report import truncate_abstract, build_payload
 from generate_report import inject_wiki_links
 from generate_report import write_report
+from generate_report import (
+    load_topic_registry,
+    extract_topics_from_markdown,
+    update_topic_registry,
+)
 
 
 def make_week(tmp_path: Path, name: str, papers: list[dict]) -> Path:
@@ -209,3 +214,68 @@ def test_load_papers_default_cap_is_500(tmp_path):
     result = load_papers([normal, anomalous])  # uses default cap_count, no explicit arg
     # normal (10) + capped anomalous (500)
     assert len(result) == 510
+
+
+# --- load_topic_registry ---
+
+def test_load_topic_registry_returns_empty_when_missing(tmp_path):
+    result = load_topic_registry(tmp_path / "topic_registry.json")
+    assert result == []
+
+
+def test_load_topic_registry_returns_list(tmp_path):
+    path = tmp_path / "topic_registry.json"
+    path.write_text('{"topics": ["ISAC", "Beamforming"], "updated": "2026-02-27"}')
+    assert load_topic_registry(path) == ["ISAC", "Beamforming"]
+
+
+def test_load_topic_registry_ignores_corrupt_file(tmp_path):
+    path = tmp_path / "topic_registry.json"
+    path.write_text("not json")
+    assert load_topic_registry(path) == []
+
+
+# --- extract_topics_from_markdown ---
+
+def test_extract_topics_finds_wiki_link_headings():
+    md = "### 1. [[ISAC]]\n### 2. [[Beamforming]]\n## Other Section"
+    result = extract_topics_from_markdown(md)
+    assert result == ["ISAC", "Beamforming"]
+
+
+def test_extract_topics_returns_empty_when_no_matches():
+    md = "## Summary\nNo topic headings here."
+    assert extract_topics_from_markdown(md) == []
+
+
+def test_extract_topics_ignores_non_numbered_headings():
+    md = "### [[Not Numbered]]\n### 1. [[ISAC]]"
+    result = extract_topics_from_markdown(md)
+    assert result == ["ISAC"]
+
+
+# --- update_topic_registry ---
+
+def test_update_topic_registry_creates_file(tmp_path):
+    path = tmp_path / "topic_registry.json"
+    update_topic_registry(path, ["ISAC", "RIS"])
+    assert path.exists()
+    data = json.loads(path.read_text())
+    assert "ISAC" in data["topics"]
+    assert "RIS" in data["topics"]
+
+
+def test_update_topic_registry_merges_with_existing(tmp_path):
+    path = tmp_path / "topic_registry.json"
+    path.write_text('{"topics": ["ISAC"], "updated": "2026-01-01"}')
+    update_topic_registry(path, ["RIS", "Beamforming"])
+    data = json.loads(path.read_text())
+    assert data["topics"] == ["ISAC", "RIS", "Beamforming"]
+
+
+def test_update_topic_registry_deduplicates(tmp_path):
+    path = tmp_path / "topic_registry.json"
+    path.write_text('{"topics": ["ISAC"], "updated": "2026-01-01"}')
+    update_topic_registry(path, ["ISAC", "RIS"])
+    data = json.loads(path.read_text())
+    assert data["topics"].count("ISAC") == 1
