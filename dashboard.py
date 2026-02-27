@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""Local web dashboard for wireless-research-intel.
+
+Run:
+    python dashboard.py
+    # then open http://localhost:5000
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+from flask import (
+    Flask,
+    Response,
+    flash,
+    redirect,
+    render_template,
+    request,
+    stream_with_context,
+    url_for,
+)
+
+# ── path constants (monkeypatched in tests) ───────────────────────────────────
+REPO_DIR = Path(__file__).parent
+PRIVATE_ENV_PATH = REPO_DIR / "private.env"
+OPENALEX_ENV_PATH = REPO_DIR / "openalex.env"
+SOURCES_PATH = REPO_DIR / "sources.yaml"
+
+app = Flask(__name__, template_folder="dashboard/templates")
+app.secret_key = "local-dashboard-dev-key"  # safe: localhost only
+
+_pipeline_running = False
+_pipeline_lock = threading.Lock()
+
+# ── helpers ──────────────────────────────────────────────────────────────────
+
+def load_env_file(path: Path) -> dict[str, str]:
+    """Parse key=value lines from a .env file, return as dict."""
+    result: dict[str, str] = {}
+    if not path.exists():
+        return result
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        result[key.strip()] = value.strip().strip("\"' ")
+    return result
+
+
+def save_env_file(path: Path, data: dict[str, str]) -> None:
+    """Write key=value lines to a .env file (skips empty values)."""
+    lines = [f"{k}={v}\n" for k, v in data.items() if v]
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def parse_sources_yaml(path: Path) -> dict:
+    """Parse sources.yaml, preserving header and all venue fields.
+
+    Returns {"header": {...}, "venues": [{"id": ..., "name": ..., ...}, ...]}
+    """
+    if not path.exists():
+        return {"header": {}, "venues": []}
+    header: dict[str, str] = {}
+    venues: list[dict] = []
+    current: dict | None = None
+    in_venues = False
+    in_ids = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not in_venues:
+            if s.startswith("version:"):
+                header["version"] = s.split(":", 1)[1].strip()
+            elif s.startswith("updated_by:"):
+                header["updated_by"] = s.split(":", 1)[1].strip().strip("\"'")
+            elif s.startswith("notes:"):
+                header["notes"] = s.split(":", 1)[1].strip().strip("\"'")
+            elif s == "venues:":
+                in_venues = True
+        else:
+            if s.startswith("- id:"):
+                if current:
+                    venues.append(current)
+                current = {
+                    "id": s.split(":", 1)[1].strip().strip("\"'"),
+                    "openalex_source_ids": [],
+                }
+                in_ids = False
+            elif current is not None:
+                if s.startswith("name:"):
+                    current["name"] = s.split(":", 1)[1].strip().strip("\"'")
+                elif s.startswith("type:"):
+                    current["type"] = s.split(":", 1)[1].strip().strip("\"'")
+                elif s.startswith("publisher:"):
+                    current["publisher"] = s.split(":", 1)[1].strip().strip("\"'")
+                elif s == "openalex_source_ids:":
+                    in_ids = True
+                elif in_ids and s.startswith("- "):
+                    val = s[1:].strip().strip("\"'")
+                    if val:
+                        current["openalex_source_ids"].append(val)
+                elif in_ids and s and not s.startswith("- "):
+                    in_ids = False
+    if current:
+        venues.append(current)
+    return {"header": header, "venues": venues}
+
+
+def serialize_sources_yaml(data: dict) -> str:
+    """Serialize sources data back to YAML string, preserving all fields."""
+    h = data.get("header", {})
+    lines: list[str] = []
+    if "version" in h:
+        lines.append(f"version: {h['version']}\n")
+    if "updated_by" in h:
+        lines.append(f'updated_by: "{h["updated_by"]}"\n')
+    if "notes" in h:
+        lines.append(f'notes: "{h["notes"]}"\n')
+    lines.append("venues:\n")
+    for v in data.get("venues", []):
+        lines.append(f'  - id: {v["id"]}\n')
+        lines.append(f'    name: "{v.get("name", "")}"\n')
+        if "type" in v:
+            lines.append(f'    type: "{v["type"]}"\n')
+        if "publisher" in v:
+            lines.append(f'    publisher: "{v["publisher"]}"\n')
+        lines.append(f"    openalex_source_ids:\n")
+        for sid in v.get("openalex_source_ids", []):
+            lines.append(f'      - "{sid}"\n')
+    return "".join(lines)
+
+
+# ── home ──────────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    last_run = None
+    last_run_path = REPO_DIR / "resource" / "last_run.json"
+    if last_run_path.exists():
+        try:
+            data = json.loads(last_run_path.read_text(encoding="utf-8"))
+            last_run = data.get("last_run_date")
+        except Exception:
+            pass
+    private = load_env_file(PRIVATE_ENV_PATH)
+    report_dir = Path(private.get("REPORT_DIR", str(REPO_DIR / "reports")))
+    report_count = len(list(report_dir.glob("*.md"))) if report_dir.exists() else 0
+    return render_template(
+        "index.html",
+        last_run=last_run,
+        report_dir=report_dir,
+        report_count=report_count,
+    )
+
+
+# ── settings placeholder (filled in Task 2) ──────────────────────────────────
+# ── venues placeholder (filled in Task 3) ────────────────────────────────────
+# ── run placeholder (filled in Task 4) ───────────────────────────────────────
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=False)

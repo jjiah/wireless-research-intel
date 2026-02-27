@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Home — Wireless Intel{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+<div class="row mt-3 g-3">
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title text-muted">Last Ingest</h5>
+        <p class="card-text fs-3 fw-semibold">{{ last_run or "Never" }}</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title text-muted">Reports</h5>
+        <p class="card-text fs-3 fw-semibold">
+          {{ report_count }} digest{{ 's' if report_count != 1 else '' }}
+        </p>
+        <small class="text-muted font-monospace">{{ report_dir }}</small>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="mt-4">
+  <a href="/run" class="btn btn-primary btn-lg">Run Pipeline Now</a>
+</div>
+{% endblock %}
