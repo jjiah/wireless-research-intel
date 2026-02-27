@@ -31,12 +31,15 @@
   </div>
 
   <div class="mb-3">
-    <label class="form-label fw-semibold">INGEST_LOOKBACK_DAYS</label>
+    <label class="form-label fw-semibold">REPORT_WEEKS</label>
     <input type="number" class="form-control" style="max-width:12rem"
-           name="INGEST_LOOKBACK_DAYS"
-           value="{{ private.get('INGEST_LOOKBACK_DAYS', '30') }}"
-           min="1" max="3650" placeholder="30">
-    <div class="form-text">How many days back to fetch when running the pipeline. Default: 30.</div>
+           name="REPORT_WEEKS"
+           value="{{ private.get('REPORT_WEEKS', '4') }}"
+           min="1" max="52" placeholder="4">
+    <div class="form-text">
+      Number of weeks to analyse. The pipeline will fetch <code>weeks × 7</code> days
+      from OpenAlex, then generate a digest covering the same window. Default: 4.
+    </div>
   </div>
 
   <div class="mb-3">

@@ -160,7 +160,7 @@ def index():
 
 # ── settings ──────────────────────────────────────────────────────────────────
 
-_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "INGEST_LOOKBACK_DAYS", "REPORT_DIR")
+_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "REPORT_WEEKS", "REPORT_DIR")
 _OPENALEX_KEYS = ("OPENALEX_API_KEY", "OPENALEX_EMAIL")
 
 
@@ -239,13 +239,14 @@ def run_stream():
             _pipeline_running = True
         try:
             private = load_env_file(PRIVATE_ENV_PATH)
-            lookback = private.get("INGEST_LOOKBACK_DAYS", "30").strip()
-            ingest_cmd = [sys.executable, str(REPO_DIR / "ingest_openalex.py")]
-            if lookback.isdigit():
-                ingest_cmd += ["--lookback-days", lookback]
+            weeks_str = private.get("REPORT_WEEKS", "4").strip()
+            weeks = int(weeks_str) if weeks_str.isdigit() and int(weeks_str) > 0 else 4
+            lookback_days = weeks * 7
             scripts = [
-                ingest_cmd,
-                [sys.executable, str(REPO_DIR / "generate_report.py"), "--weeks", "4"],
+                [sys.executable, str(REPO_DIR / "ingest_openalex.py"),
+                 "--lookback-days", str(lookback_days)],
+                [sys.executable, str(REPO_DIR / "generate_report.py"),
+                 "--weeks", str(weeks)],
             ]
             for script_args in scripts:
                 name = Path(script_args[1]).name
