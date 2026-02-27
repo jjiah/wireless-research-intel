@@ -36,9 +36,20 @@
            name="REPORT_WEEKS"
            value="{{ private.get('REPORT_WEEKS', '4') }}"
            min="1" max="52" placeholder="4">
+    <div class="form-text">Number of recent weeks the digest should cover. Default: 4.</div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label fw-semibold">INGEST_SINCE_DATE</label>
+    <input type="date" class="form-control" style="max-width:12rem"
+           name="INGEST_SINCE_DATE"
+           value="{{ private.get('INGEST_SINCE_DATE', '') }}"
+           placeholder="2024-01-01">
     <div class="form-text">
-      Number of weeks to analyse. The pipeline will fetch <code>weeks × 7</code> days
-      from OpenAlex, then generate a digest covering the same window. Default: 4.
+      Floor date for ingestion. On first run (no history yet) the pipeline fetches
+      from this date forward. Subsequent runs use the last-run date automatically,
+      but never go earlier than this floor. Leave blank to disable the guard
+      (not recommended).
     </div>
   </div>
 

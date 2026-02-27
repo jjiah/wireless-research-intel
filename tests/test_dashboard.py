@@ -69,6 +69,7 @@ def test_settings_save_writes_env_files(client, app_tmp):
         "SILICONFLOW_API_KEY": "new-key",
         "SILICONFLOW_MODEL": "Pro/zai-org/GLM-5",
         "REPORT_WEEKS": "6",
+        "INGEST_SINCE_DATE": "2024-01-01",
         "REPORT_DIR": "C:\\new-reports",
         "OPENALEX_API_KEY": "oalex-key",
         "OPENALEX_EMAIL": "user@example.com",
@@ -79,6 +80,7 @@ def test_settings_save_writes_env_files(client, app_tmp):
     assert "new-key" in private
     assert "Pro/zai-org/GLM-5" in private
     assert "6" in private
+    assert "2024-01-01" in private
     assert "C:\\new-reports" in private
     assert "oalex-key" in openalex
     assert "user@example.com" in openalex

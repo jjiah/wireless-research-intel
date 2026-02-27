@@ -160,7 +160,7 @@ def index():
 
 # ── settings ──────────────────────────────────────────────────────────────────
 
-_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "REPORT_WEEKS", "REPORT_DIR")
+_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "REPORT_WEEKS", "INGEST_SINCE_DATE", "REPORT_DIR")
 _OPENALEX_KEYS = ("OPENALEX_API_KEY", "OPENALEX_EMAIL")
 
 
@@ -241,10 +241,27 @@ def run_stream():
             private = load_env_file(PRIVATE_ENV_PATH)
             weeks_str = private.get("REPORT_WEEKS", "4").strip()
             weeks = int(weeks_str) if weeks_str.isdigit() and int(weeks_str) > 0 else 4
-            lookback_days = weeks * 7
+
+            # Determine since_date: use last_run.json if it exists, else fall back
+            # to the configured floor date. Either way the fetch is always bounded.
+            since_date = None
+            last_run_path = REPO_DIR / "resource" / "last_run.json"
+            if last_run_path.exists():
+                try:
+                    since_date = json.loads(
+                        last_run_path.read_text(encoding="utf-8")
+                    ).get("last_run_date")
+                except Exception:
+                    pass
+            floor_date = private.get("INGEST_SINCE_DATE", "").strip()
+            if floor_date and (since_date is None or since_date < floor_date):
+                since_date = floor_date
+
+            ingest_cmd = [sys.executable, str(REPO_DIR / "ingest_openalex.py")]
+            if since_date:
+                ingest_cmd += ["--since", since_date]
             scripts = [
-                [sys.executable, str(REPO_DIR / "ingest_openalex.py"),
-                 "--lookback-days", str(lookback_days)],
+                ingest_cmd,
                 [sys.executable, str(REPO_DIR / "generate_report.py"),
                  "--weeks", str(weeks)],
             ]

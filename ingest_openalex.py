@@ -480,13 +480,10 @@ def main() -> None:
             print(f"{source.venue_id}: error {exc}", file=sys.stderr)
 
     print(f"Total: +{total_added} new, {total_seen} existing, {total_skipped} skipped (no DOI), {total_skipped_no_abstract} skipped (no abstract)")
-    use_default_incremental_window = (
-        args.since is None and args.until is None and args.lookback_days is None
-    )
-    if use_default_incremental_window:
+    if args.until is None:
         save_last_run(state_path, datetime.now(timezone.utc).date().isoformat())
     else:
-        print("Skipped updating last_run.json because a custom date window was used.")
+        print("Skipped updating last_run.json because --until was specified (targeted backfill).")
 
 
 if __name__ == "__main__":
