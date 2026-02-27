@@ -22,7 +22,7 @@ def load_weeks(weeks_dir: Path, n: int) -> list[Path]:
 def load_papers(
     week_dirs: list[Path],
     cap_multiplier: float = 3.0,
-    cap_count: int = 300,
+    cap_count: int = 500,
 ) -> list[dict]:
     """Load all papers from week dirs; cap anomalous weeks by citation rank."""
     week_papers: list[list[dict]] = []
@@ -53,7 +53,7 @@ def load_papers(
     return result
 
 
-def truncate_abstract(abstract: str, max_words: int = 150) -> str:
+def truncate_abstract(abstract: str, max_words: int = 300) -> str:
     """Return first max_words words of abstract, with ellipsis if truncated."""
     words = abstract.split()
     if len(words) <= max_words:
@@ -70,7 +70,7 @@ def build_payload(papers: list[dict]) -> str:
         week = (p.get("published") or "")[:7]  # YYYY-MM
         citations = p.get("cited_by_count") or 0
         abstract = truncate_abstract(
-            (p.get("abstract") or "").replace("|", "/"), max_words=150
+            (p.get("abstract") or "").replace("|", "/"), max_words=300
         )
         lines.append(f"{title} | {venue} | {week} | {citations} | {abstract}")
     return "\n".join(lines)

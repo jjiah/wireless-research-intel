@@ -193,3 +193,19 @@ def test_write_report_content_correct(tmp_path):
     content = "# My Report\nSome content."
     path = write_report(content, tmp_path, "2026-02-27")
     assert path.read_text(encoding="utf-8") == content
+
+
+def test_truncate_abstract_default_is_300_words():
+    words = ["word"] * 350
+    text = " ".join(words)
+    result = truncate_abstract(text)  # uses default max_words, no explicit arg
+    assert len(result.split()) == 300  # 300 words, last "word..." appended
+
+
+def test_load_papers_default_cap_is_500(tmp_path):
+    # anomalous week triggers cap — verify default cap is 500 not 300
+    normal = make_week(tmp_path, "2025-01-06", [sample_paper(cited=i) for i in range(10)])
+    anomalous = make_week(tmp_path, "2025-01-13", [sample_paper(cited=i) for i in range(600)])
+    result = load_papers([normal, anomalous])  # uses default cap_count, no explicit arg
+    # normal (10) + capped anomalous (500)
+    assert len(result) == 510
