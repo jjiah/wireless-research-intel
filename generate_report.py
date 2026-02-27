@@ -162,8 +162,9 @@ def call_llm(payload: str, template: str, weeks: int, api_key: str, preferred_to
         )
     )
 
+    model = os.getenv("SILICONFLOW_MODEL") or "Pro/moonshotai/Kimi-K2.5"
     response = client.chat.completions.create(
-        model="Pro/zai-org/GLM-5",
+        model=model,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -237,7 +238,7 @@ def main() -> None:
         sys.exit(1)
     template = template_path.read_text(encoding="utf-8")
 
-    print("Calling SiliconFlow GLM-5...")
+    print("Calling SiliconFlow Kimi-K2.5...")
     markdown = call_llm(payload, template, args.weeks, api_key, preferred_topics)
 
     markdown = inject_wiki_links(markdown)

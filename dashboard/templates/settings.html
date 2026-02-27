@@ -15,6 +15,22 @@
   </div>
 
   <div class="mb-3">
+    <label class="form-label fw-semibold">SILICONFLOW_MODEL</label>
+    <input type="text" class="form-control font-monospace"
+           name="SILICONFLOW_MODEL"
+           value="{{ private.get('SILICONFLOW_MODEL', '') }}"
+           list="model-suggestions"
+           placeholder="Pro/moonshotai/Kimi-K2.5">
+    <datalist id="model-suggestions">
+      <option value="Pro/moonshotai/Kimi-K2.5">
+      <option value="Pro/zai-org/GLM-5">
+      <option value="Pro/deepseek-ai/DeepSeek-V3">
+      <option value="Pro/Qwen/Qwen3-235B-A22B">
+    </datalist>
+    <div class="form-text">SiliconFlow model used to generate the weekly digest. Leave blank to use the default.</div>
+  </div>
+
+  <div class="mb-3">
     <label class="form-label fw-semibold">REPORT_DIR</label>
     <input type="text" class="form-control font-monospace"
            name="REPORT_DIR"

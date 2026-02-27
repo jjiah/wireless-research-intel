@@ -160,7 +160,7 @@ def index():
 
 # ── settings ──────────────────────────────────────────────────────────────────
 
-_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "REPORT_DIR")
+_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "SILICONFLOW_MODEL", "REPORT_DIR")
 _OPENALEX_KEYS = ("OPENALEX_API_KEY", "OPENALEX_EMAIL")
 
 
