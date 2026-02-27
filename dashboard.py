@@ -158,7 +158,27 @@ def index():
     )
 
 
-# ── settings placeholder (filled in Task 2) ──────────────────────────────────
+# ── settings ──────────────────────────────────────────────────────────────────
+
+_PRIVATE_KEYS = ("SILICONFLOW_API_KEY", "REPORT_DIR")
+_OPENALEX_KEYS = ("OPENALEX_API_KEY", "OPENALEX_EMAIL")
+
+
+@app.route("/settings")
+def settings():
+    private = load_env_file(PRIVATE_ENV_PATH)
+    openalex = load_env_file(OPENALEX_ENV_PATH)
+    return render_template("settings.html", private=private, openalex=openalex)
+
+
+@app.route("/settings/save", methods=["POST"])
+def settings_save():
+    private = {k: request.form.get(k, "") for k in _PRIVATE_KEYS}
+    openalex = {k: request.form.get(k, "") for k in _OPENALEX_KEYS}
+    save_env_file(PRIVATE_ENV_PATH, private)
+    save_env_file(OPENALEX_ENV_PATH, openalex)
+    flash("Settings saved.", "success")
+    return redirect(url_for("settings"))
 # ── venues placeholder (filled in Task 3) ────────────────────────────────────
 # ── run placeholder (filled in Task 4) ───────────────────────────────────────
 

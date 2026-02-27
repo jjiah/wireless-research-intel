@@ -47,3 +47,34 @@ def test_home_shows_last_run_date(client, app_tmp):
     )
     resp = client.get("/")
     assert b"2026-02-20" in resp.data
+
+
+# ── settings page ─────────────────────────────────────────────────────────────
+
+def test_settings_returns_200(client):
+    resp = client.get("/settings")
+    assert resp.status_code == 200
+
+
+def test_settings_loads_env_values(client, app_tmp):
+    (app_tmp / "private.env").write_text("SILICONFLOW_API_KEY=sk-test\nREPORT_DIR=C:\\reports\n", encoding="utf-8")
+    (app_tmp / "openalex.env").write_text("OPENALEX_EMAIL=test@example.com\n", encoding="utf-8")
+    resp = client.get("/settings")
+    assert b"sk-test" in resp.data
+    assert b"test@example.com" in resp.data
+
+
+def test_settings_save_writes_env_files(client, app_tmp):
+    resp = client.post("/settings/save", data={
+        "SILICONFLOW_API_KEY": "new-key",
+        "REPORT_DIR": "C:\\new-reports",
+        "OPENALEX_API_KEY": "oalex-key",
+        "OPENALEX_EMAIL": "user@example.com",
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    private = (app_tmp / "private.env").read_text(encoding="utf-8")
+    openalex = (app_tmp / "openalex.env").read_text(encoding="utf-8")
+    assert "new-key" in private
+    assert "C:\\new-reports" in private
+    assert "oalex-key" in openalex
+    assert "user@example.com" in openalex
