@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 *.pyo
 .pytest_cache/
+.tmp/
 
 # Local Claude Code settings
 .claude/

@@ -181,6 +181,11 @@ It also includes an incomplete-output heuristic for multi-page chunks. If a
 chunk returns suspiciously short content for its page span, the script
 automatically re-splits that chunk and retries on smaller ranges.
 
+For digital PDFs that contain extractable text, the script also uses a
+chunk-level fallback: when OCR output is clearly corrupted (for example,
+repeated-token noise like `1. 1. 1. ...`), it switches that chunk to native
+PDF text extraction and keeps numbered lists/paragraphs.
+
 ### Resume interrupted runs
 
 Re-run the same input with `--resume`:
@@ -209,3 +214,73 @@ Includes:
 - Missing content from large chunks: rerun with `--chunk-pages 1` (safest),
   or lower `--min-chars-per-page` if your document is very image-heavy.
 - Rate limit or transient API failures: use `--resume` to continue after retry window.
+
+## SiliconFlow Advanced API Wrapper
+
+`siliconflow_api.py` now provides reusable wrappers aligned with SiliconFlow API docs for:
+- Embeddings (`/v1/embeddings`)
+- Rerank (`/v1/rerank`)
+- Images generations (`/v1/images/generations`)
+- Batch file upload/list (`/v1/files`)
+- Batch create/get/list/cancel (`/v1/batches...`)
+
+Example:
+
+```python
+from pathlib import Path
+from siliconflow_api import SiliconFlowAPI
+
+api = SiliconFlowAPI()  # reads SILICONFLOW_API_KEY / SILICONFLOW_BASE_URL
+
+emb = api.create_embeddings(
+    model="BAAI/bge-m3",
+    input_text=["wireless scheduling", "semantic communication"],
+)
+
+rr = api.create_rerank(
+    model="BAAI/bge-reranker-v2-m3",
+    query="highly relevant wireless survey",
+    documents=["doc A", "doc B", "doc C"],
+    top_n=2,
+    return_documents=True,
+)
+
+img = api.create_image_generation(
+    model="black-forest-labs/FLUX.1-schnell",
+    prompt="futuristic urban air mobility corridor",
+    image_size="1024x1024",
+    batch_size=1,
+)
+
+uploaded = api.upload_batch_file(file_path=Path("requests.jsonl"))
+batch = api.create_batch(
+    input_file_id=uploaded.get("id") or uploaded["data"]["id"],
+    endpoint="/v1/chat/completions",
+    completion_window="24h",
+)
+```
+
+### Command-line utility (`siliconflow_tools.py`)
+
+Call the same APIs without writing Python code:
+
+```powershell
+# Embeddings
+python siliconflow_tools.py embeddings --model BAAI/bge-m3 --input "hello world"
+
+# Rerank
+python siliconflow_tools.py rerank --model BAAI/bge-reranker-v2-m3 --query "wireless" --doc "doc A" --doc "doc B" --top-n 1 --return-documents
+
+# Images
+python siliconflow_tools.py image-generate --model black-forest-labs/FLUX.1-schnell --prompt "futuristic air mobility corridor" --image-size 1024x1024 --batch-size 1
+
+# Batch file upload / list
+python siliconflow_tools.py batch-upload-file --file .\requests.jsonl
+python siliconflow_tools.py batch-list-files
+
+# Batch create / get / list / cancel
+python siliconflow_tools.py batch-create --input-file-id file_xxx --endpoint /v1/chat/completions --completion-window 24h
+python siliconflow_tools.py batch-get --batch-id batch_xxx
+python siliconflow_tools.py batch-list --limit 20
+python siliconflow_tools.py batch-cancel --batch-id batch_xxx
+```

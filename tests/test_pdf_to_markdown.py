@@ -28,6 +28,7 @@ def make_args(**overrides):
         "resume": False,
         "max_retries": None,
         "timeout_seconds": None,
+        "min_chars_per_page": None,
         "model": None,
         "base_url": None,
     }
@@ -63,6 +64,73 @@ def test_merge_markdown_normalization_dedupe_and_fence_balance():
     assert "\r" not in merged
     assert "line2\n\nline2" not in merged
     assert merged.strip().endswith("```")
+
+
+def test_incomplete_multi_page_heuristic():
+    short = "<|ref|>title<|/ref|>\nCover page only"
+    assert p2m.is_likely_incomplete_chunk_output(short, page_count=5, min_chars_per_page=120)
+    long_text = ("\n".join([f"Line {i} with enough content." for i in range(30)]))
+    assert not p2m.is_likely_incomplete_chunk_output(long_text, page_count=5, min_chars_per_page=20)
+
+
+def test_clean_ocr_markdown_removes_layout_tokens():
+    raw = (
+        "<|ref|>title<|/ref|><|det|>[[1,2,3,4]]<|/det|>\n"
+        "# Heading\n\n"
+        "<|ref|>text<|/ref|><|det|>[[5,6,7,8]]<|/det|>\n"
+        "Line one.- Bullet two\n"
+    )
+    cleaned = p2m.clean_ocr_markdown(raw)
+    assert "<|ref|>" not in cleaned
+    assert "<|det|>" not in cleaned
+    assert "# Heading" in cleaned
+    assert "Line one." in cleaned
+    assert "- Bullet two" in cleaned
+
+
+def test_clean_ocr_markdown_drops_repeated_number_noise_and_blank_page():
+    raw = (
+        "PAGE LEFT INTENTIONALLY BLANK\n"
+        "1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.\n"
+        "Useful sentence stays.\n"
+    )
+    cleaned = p2m.clean_ocr_markdown(raw)
+    assert "PAGE LEFT INTENTIONALLY BLANK" not in cleaned
+    assert "1. 1. 1." not in cleaned
+    assert "Useful sentence stays." in cleaned
+
+
+def test_has_repeated_short_token_noise():
+    noisy = "1. " * 40
+    assert p2m.has_repeated_short_token_noise(noisy)
+    normal = "1. First item\n2. Second item\n3. Third item"
+    assert not p2m.has_repeated_short_token_noise(normal)
+
+
+def test_normalize_pdf_extracted_text_preserves_numbered_list():
+    raw = (
+        "Header line\n"
+        "1. First point\n"
+        "2. Second point\n"
+        "3. Third point\n"
+        "PAGE LEFT INTENTIONALLY BLANK\n"
+    )
+    normalized = p2m.normalize_pdf_extracted_text(raw)
+    assert "PAGE LEFT INTENTIONALLY BLANK" not in normalized
+    assert "1. First point" in normalized
+    assert "2. Second point" in normalized
+    assert "3. Third point" in normalized
+
+
+def test_should_use_pdf_text_fallback_for_repeated_noise():
+    raw_ocr = ("1. " * 50).strip()
+    cleaned_ocr = raw_ocr
+    pdf_text = (
+        "1. Informs other operators\n"
+        "2. Enables strategic deconfliction\n"
+        "3. Enables restriction distribution\n"
+    )
+    assert p2m.should_use_pdf_text_fallback(raw_ocr, cleaned_ocr, pdf_text)
 
 
 def test_resolve_config_precedence_and_env_loading(tmp_path, monkeypatch):
@@ -162,6 +230,7 @@ def make_config(tmp_path: Path, input_pdf: Path, resume: bool = False) -> p2m.Co
         resume=resume,
         max_retries=1,
         timeout_seconds=30,
+        min_chars_per_page=1,
         base_url="https://api.siliconflow.com/v1",
         model="deepseek-ai/DeepSeek-OCR",
         api_key="dummy",
@@ -257,3 +326,30 @@ def test_process_resume_skips_completed_chunks(tmp_path, monkeypatch):
     second_code = p2m.process(resume_config)
     assert second_code == 0
     assert touched_resume == ["000003_000004"]
+
+
+def test_process_heuristic_split_on_short_multi_page_output(tmp_path, monkeypatch):
+    pdf = tmp_path / "doc.pdf"
+    write_pdf(pdf, pages=4)
+    config = make_config(tmp_path, pdf, resume=False)
+    config = p2m.Config(**{**config.__dict__, "chunk_pages": 4, "min_chars_per_page": 100})
+
+    monkeypatch.setattr(p2m, "build_client", lambda **kwargs: object())
+
+    def fake_call(**kwargs):
+        chunk_id = kwargs["chunk_pdf"].stem.replace("chunk_", "")
+        if chunk_id == "000001_000004":
+            return "cover-only", 1, None, None
+        return f"ok-{chunk_id} with enough text " * 20, 1, None, None
+
+    monkeypatch.setattr(p2m, "call_ocr_with_retries", fake_call)
+    code = p2m.process(config)
+    assert code == 0
+
+    run_key = p2m.compute_run_key(pdf)
+    manifest_path = config.output_root / f"{pdf.stem}-{run_key}" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    statuses = {c["id"]: c["status"] for c in manifest["chunks"]}
+    assert statuses["000001_000004"] == "split"
+    assert statuses["000001_000002"] == "done"
+    assert statuses["000003_000004"] == "done"

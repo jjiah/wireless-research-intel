@@ -126,12 +126,9 @@ def write_report(content: str, output_dir: Path, date_str: str) -> Path:
 
 def call_llm(payload: str, template: str, weeks: int, api_key: str, preferred_topics: list[str] | None = None) -> str:
     """Call SiliconFlow GLM-5 with the paper payload and return Markdown."""
-    from openai import OpenAI
+    from siliconflow_api import build_openai_client
 
-    client = OpenAI(
-        api_key=api_key,
-        base_url="https://api.siliconflow.cn/v1",
-    )
+    client = build_openai_client(api_key=api_key)
 
     system = (
         "You are a research analyst specialising in wireless communications. "

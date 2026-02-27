@@ -7,6 +7,8 @@ import hashlib
 import json
 import os
 import random
+import re
+import shutil
 import sys
 import time
 from dataclasses import dataclass
@@ -32,6 +34,7 @@ class Config:
     resume: bool
     max_retries: int
     timeout_seconds: float
+    min_chars_per_page: int
     base_url: str
     model: str
     api_key: str
@@ -92,6 +95,11 @@ def parse_args() -> argparse.Namespace:
         help="Per-request timeout in seconds (default: 120).",
     )
     parser.add_argument(
+        "--min-chars-per-page",
+        type=int,
+        help="Heuristic lower bound used to detect incomplete multi-page OCR output (default: 160).",
+    )
+    parser.add_argument(
         "--model",
         help=f"OCR model id (default: {DEFAULT_MODEL}).",
     )
@@ -129,6 +137,9 @@ def resolve_config(args: argparse.Namespace) -> Config:
     timeout_seconds = float(
         args.timeout_seconds or os.getenv("PDF2MD_TIMEOUT_SECONDS") or 120.0
     )
+    min_chars_per_page = int(
+        args.min_chars_per_page or os.getenv("PDF2MD_MIN_CHARS_PER_PAGE") or 160
+    )
     base_url = args.base_url or os.getenv("SILICONFLOW_BASE_URL") or DEFAULT_BASE_URL
     model = args.model or os.getenv("SILICONFLOW_MODEL") or DEFAULT_MODEL
 
@@ -144,6 +155,9 @@ def resolve_config(args: argparse.Namespace) -> Config:
     if timeout_seconds <= 0:
         print("--timeout-seconds must be > 0", file=sys.stderr)
         sys.exit(1)
+    if min_chars_per_page < 1:
+        print("--min-chars-per-page must be >= 1", file=sys.stderr)
+        sys.exit(1)
 
     output_path = Path(args.output).expanduser().resolve() if args.output else None
     return Config(
@@ -155,6 +169,7 @@ def resolve_config(args: argparse.Namespace) -> Config:
         resume=args.resume,
         max_retries=max_retries,
         timeout_seconds=timeout_seconds,
+        min_chars_per_page=min_chars_per_page,
         base_url=base_url,
         model=model,
         api_key=api_key,
@@ -245,6 +260,157 @@ def is_nonempty_file(path: Path) -> bool:
 
 def normalize_newlines(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def strip_layout_tokens(text: str) -> str:
+    cleaned = re.sub(r"<\|[^>]+\|>", " ", text)
+    cleaned = re.sub(r"\[\[[0-9,\s]+\]\]", " ", cleaned)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    return normalize_newlines(cleaned)
+
+
+def clean_ocr_markdown(content: str) -> str:
+    """Convert OCR raw layout-tag output into cleaner markdown-like text."""
+    text = normalize_newlines(content)
+    # Remove detector box payloads.
+    text = re.sub(r"<\|det\|>.*?<\|/det\|>", "", text, flags=re.DOTALL)
+    # Remove ref-type markers such as <|ref|>title<|/ref|>.
+    text = re.sub(r"<\|ref\|>[^<]*<\|/ref\|>", "", text)
+    # Drop any remaining tag fragments.
+    text = re.sub(r"<\|[^>]+\|>", "", text)
+    # Drop empty image placeholder lines after tag removal.
+    lines: list[str] = []
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            lines.append("")
+            continue
+        if stripped.upper() == "PAGE LEFT INTENTIONALLY BLANK":
+            continue
+        if stripped in {"image", "image_caption", "title", "text", "sub_title"}:
+            continue
+        # Drop OCR noise lines that are mostly a tiny token repeated many times
+        # (for example: "1. 1. 1. 1. ...").
+        tokens = [tok for tok in re.split(r"\s+", stripped) if tok]
+        if len(tokens) >= 20:
+            normalized = [re.sub(r"[^\w]+$", "", tok) for tok in tokens]
+            if normalized and len(set(normalized)) == 1 and len(normalized[0]) <= 4:
+                continue
+        if re.fullmatch(r"(?:\d+[.)]?\s+){20,}\d+[.)]?", stripped):
+            continue
+        lines.append(stripped)
+    text = "\n".join(lines)
+    # Recover common flattened bullet formatting from OCR.
+    text = text.replace(".- ", ".\n- ")
+    text = re.sub(r"\s+- ", "\n- ", text)
+    # Normalize excessive blank lines.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip() + "\n"
+
+
+def has_repeated_short_token_noise(text: str) -> bool:
+    for line in normalize_newlines(text).split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        tokens = [tok for tok in re.split(r"\s+", stripped) if tok]
+        if len(tokens) < 20:
+            continue
+        normalized = [re.sub(r"[^\w]+$", "", tok).lower() for tok in tokens]
+        if not normalized:
+            continue
+        unique = set(normalized)
+        if len(unique) == 1 and len(next(iter(unique))) <= 4:
+            return True
+    return False
+
+
+def count_numbered_list_lines(text: str) -> int:
+    return sum(
+        1
+        for line in normalize_newlines(text).split("\n")
+        if re.match(r"^\s*\d+\.\s+\S", line.strip())
+    )
+
+
+def extract_pdf_text(chunk_pdf: Path) -> str:
+    try:
+        reader = PdfReader(str(chunk_pdf))
+        parts = [(page.extract_text() or "") for page in reader.pages]
+        return normalize_newlines("\n".join(parts))
+    except Exception:
+        return ""
+
+
+def normalize_pdf_extracted_text(text: str) -> str:
+    text = normalize_newlines(text)
+    lines = [re.sub(r"[ \t]+", " ", ln).strip() for ln in text.split("\n")]
+    out: list[str] = []
+    para: list[str] = []
+
+    def flush_para() -> None:
+        nonlocal para
+        if para:
+            out.append(" ".join(para))
+            para = []
+
+    for s in lines:
+        if not s:
+            flush_para()
+            continue
+        if s.upper() == "PAGE LEFT INTENTIONALLY BLANK":
+            continue
+        if re.fullmatch(r"\d{1,3}", s):
+            # Likely standalone page number.
+            continue
+        if re.match(r"^\d+\.\s+\S", s) or re.match(r"^[-*]\s+\S", s):
+            flush_para()
+            out.append(s)
+            continue
+        if para and para[-1].endswith("-"):
+            para[-1] = para[-1][:-1] + s
+        else:
+            para.append(s)
+    flush_para()
+    result = "\n".join(out)
+    result = re.sub(r"\n{3,}", "\n\n", result).strip()
+    return (result + "\n") if result else ""
+
+
+def should_use_pdf_text_fallback(
+    raw_ocr: str,
+    cleaned_ocr: str,
+    pdf_text: str,
+) -> bool:
+    pdf_stripped = pdf_text.strip()
+    if not pdf_stripped:
+        return False
+    if has_repeated_short_token_noise(raw_ocr) or has_repeated_short_token_noise(cleaned_ocr):
+        # Even short extracted text can recover severe repeated-token OCR corruption.
+        return len(pdf_stripped) >= 40
+    if len(pdf_stripped) < 120:
+        return False
+    pdf_lists = count_numbered_list_lines(pdf_text)
+    ocr_lists = count_numbered_list_lines(cleaned_ocr)
+    if pdf_lists >= 3 and ocr_lists == 0:
+        return True
+    if len(cleaned_ocr.strip()) < int(0.6 * len(pdf_text.strip())) and len(pdf_text.strip()) >= 500:
+        return True
+    return False
+
+
+def is_likely_incomplete_chunk_output(
+    content: str,
+    page_count: int,
+    min_chars_per_page: int,
+) -> bool:
+    if page_count <= 1:
+        return False
+    cleaned = strip_layout_tokens(content).strip()
+    if not cleaned:
+        return True
+    char_threshold = page_count * min_chars_per_page
+    return len(cleaned) < char_threshold
 
 
 def classify_error(exc: Exception) -> str:
@@ -444,9 +610,9 @@ def merge_markdown(chunks_in_order: list[str]) -> str:
 
 
 def build_client(api_key: str, base_url: str) -> Any:
-    from openai import OpenAI
+    from siliconflow_api import build_openai_client
 
-    return OpenAI(api_key=api_key, base_url=base_url)
+    return build_openai_client(api_key=api_key, base_url=base_url)
 
 
 def process(config: Config) -> int:
@@ -459,6 +625,9 @@ def process(config: Config) -> int:
     chunks_md_dir = run_dir / "chunks_md"
     logs_dir = run_dir / "logs"
     manifest_path = run_dir / "manifest.json"
+
+    if run_dir.exists() and not config.resume:
+        shutil.rmtree(run_dir)
 
     run_dir.mkdir(parents=True, exist_ok=True)
     chunks_pdf_dir.mkdir(parents=True, exist_ok=True)
@@ -520,11 +689,30 @@ def process(config: Config) -> int:
         chunk["duration_sec"] = round(time.monotonic() - begin, 3)
 
         if content is not None:
-            md_path.write_text(content, encoding="utf-8")
-            chunk["status"] = "done"
-            chunk["error_type"] = None
-            save_manifest(manifest_path, manifest)
-            continue
+            page_span = int(chunk["page_end"]) - int(chunk["page_start"]) + 1
+            if is_likely_incomplete_chunk_output(
+                content=content,
+                page_count=page_span,
+                min_chars_per_page=config.min_chars_per_page,
+            ):
+                content = None
+                error_type = "split_required"
+                error_message = (
+                    f"incomplete multi-page OCR output heuristic triggered "
+                    f"(pages={page_span}, min_chars_per_page={config.min_chars_per_page})"
+                )
+            else:
+                cleaned_content = clean_ocr_markdown(content)
+                pdf_text_raw = extract_pdf_text(pdf_path)
+                if should_use_pdf_text_fallback(content, cleaned_content, pdf_text_raw):
+                    normalized_pdf_text = normalize_pdf_extracted_text(pdf_text_raw)
+                    if normalized_pdf_text:
+                        cleaned_content = normalized_pdf_text
+                md_path.write_text(cleaned_content, encoding="utf-8")
+                chunk["status"] = "done"
+                chunk["error_type"] = None
+                save_manifest(manifest_path, manifest)
+                continue
 
         if error_type == "split_required":
             children = split_chunk(chunk)
@@ -538,6 +726,9 @@ def process(config: Config) -> int:
             left, right = children
             chunk["status"] = "split"
             chunk["error_type"] = "split_required"
+            # Split parent artifacts are not meaningful output; remove stale md if present.
+            if md_path.exists():
+                md_path.unlink(missing_ok=True)
             for child in (left, right):
                 existing = chunk_lookup.get(child["id"])
                 if existing is None:
@@ -590,6 +781,16 @@ def process(config: Config) -> int:
                 file=sys.stderr,
             )
         return 2
+
+    # Keep only failures for currently failed chunks (drop recovered history).
+    failed_ids = {
+        c["id"] for c in manifest.get("chunks", [])
+        if c["status"] in {"failed_retriable", "failed_terminal"}
+    }
+    manifest["failures"] = [
+        f for f in manifest.get("failures", [])
+        if f.get("chunk_id") in failed_ids
+    ]
 
     done_chunks = [c for c in manifest.get("chunks", []) if c["status"] == "done"]
     done_chunks_sorted = sorted(done_chunks, key=lambda c: (c["page_start"], c["page_end"]))
