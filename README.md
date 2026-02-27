@@ -81,3 +81,21 @@ Auto-resolve source IDs:
 python resolve_openalex_ids.py
 python resolve_openalex_ids.py --validate
 ```
+
+## Automation
+
+To run the full pipeline (ingest + report) automatically every Monday at 08:00:
+
+1. Open **Task Scheduler** (search in Start menu).
+2. Click **Action → Import Task…**
+3. Select `automation/weekly_digest.xml` from this repo.
+4. Enter your Windows account password when prompted.
+5. The task appears under `\wireless-research-intel\weekly-digest`.
+
+If your computer is off at 08:00, the task runs on next startup (requires network).
+
+To run manually at any time:
+
+```bat
+run_pipeline.bat
+```
