@@ -136,3 +136,61 @@ def test_venues_add_duplicate_shows_error(client, app_tmp):
         "openalex_source_ids": "S999",
     }, follow_redirects=True)
     assert b"already exists" in resp.data
+
+
+# ── run page ──────────────────────────────────────────────────────────────────
+
+def test_run_page_returns_200(client):
+    resp = client.get("/run")
+    assert resp.status_code == 200
+
+
+def test_run_stream_content_type(client, monkeypatch):
+    """SSE endpoint returns text/event-stream."""
+    import dashboard
+
+    class MockProc:
+        def __init__(self):
+            self.stdout = iter([])
+            self.returncode = 0
+        def wait(self):
+            pass
+
+    monkeypatch.setattr(dashboard.subprocess, "Popen", lambda *a, **k: MockProc())
+    resp = client.get("/run/stream")
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.content_type
+
+
+def test_run_stream_done_ok_on_success(client, monkeypatch):
+    """Stream ends with [DONE:OK] when both scripts exit 0."""
+    import dashboard
+
+    class MockProc:
+        def __init__(self):
+            self.stdout = iter(["output line\n"])
+            self.returncode = 0
+        def wait(self):
+            pass
+
+    monkeypatch.setattr(dashboard.subprocess, "Popen", lambda *a, **k: MockProc())
+    resp = client.get("/run/stream")
+    body = resp.get_data(as_text=True)
+    assert "[DONE:OK]" in body
+
+
+def test_run_stream_done_failed_on_error(client, monkeypatch):
+    """Stream ends with [DONE:FAILED] when a script exits non-zero."""
+    import dashboard
+
+    class MockProc:
+        def __init__(self):
+            self.stdout = iter([])
+            self.returncode = 1
+        def wait(self):
+            pass
+
+    monkeypatch.setattr(dashboard.subprocess, "Popen", lambda *a, **k: MockProc())
+    resp = client.get("/run/stream")
+    body = resp.get_data(as_text=True)
+    assert "[DONE:FAILED]" in body

@@ -221,7 +221,55 @@ def venues_remove(venue_id: str):
         SOURCES_PATH.write_text(serialize_sources_yaml(data), encoding="utf-8")
         flash(f"Venue '{venue_id}' removed.", "success")
     return redirect(url_for("venues"))
-# ── run placeholder (filled in Task 4) ───────────────────────────────────────
+# ── run pipeline ──────────────────────────────────────────────────────────────
+
+@app.route("/run")
+def run_page():
+    return render_template("run.html", running=_pipeline_running)
+
+
+@app.route("/run/stream")
+def run_stream():
+    def generate():
+        global _pipeline_running
+        with _pipeline_lock:
+            if _pipeline_running:
+                yield "data: [Pipeline already running. Refresh and try again.]\n\n"
+                return
+            _pipeline_running = True
+        try:
+            scripts = [
+                [sys.executable, str(REPO_DIR / "ingest_openalex.py")],
+                [sys.executable, str(REPO_DIR / "generate_report.py"), "--weeks", "4"],
+            ]
+            for script_args in scripts:
+                name = Path(script_args[1]).name
+                yield f"data: Running {name}...\n\n"
+                proc = subprocess.Popen(
+                    script_args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=str(REPO_DIR),
+                )
+                assert proc.stdout is not None
+                for line in proc.stdout:
+                    yield f"data: {line.rstrip()}\n\n"
+                proc.wait()
+                if proc.returncode != 0:
+                    yield f"data: ERROR: {name} exited with code {proc.returncode}\n\n"
+                    yield "data: [DONE:FAILED]\n\n"
+                    return
+                yield f"data: {name} completed successfully.\n\n"
+            yield "data: [DONE:OK]\n\n"
+        finally:
+            _pipeline_running = False
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 if __name__ == "__main__":
