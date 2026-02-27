@@ -235,6 +235,12 @@ def test_load_topic_registry_ignores_corrupt_file(tmp_path):
     assert load_topic_registry(path) == []
 
 
+def test_load_topic_registry_returns_empty_for_missing_key(tmp_path):
+    path = tmp_path / "topic_registry.json"
+    path.write_text('{"updated": "2026-01-01"}')  # valid JSON but no "topics" key
+    assert load_topic_registry(path) == []
+
+
 # --- extract_topics_from_markdown ---
 
 def test_extract_topics_finds_wiki_link_headings():
@@ -250,6 +256,12 @@ def test_extract_topics_returns_empty_when_no_matches():
 
 def test_extract_topics_ignores_non_numbered_headings():
     md = "### [[Not Numbered]]\n### 1. [[ISAC]]"
+    result = extract_topics_from_markdown(md)
+    assert result == ["ISAC"]
+
+
+def test_extract_topics_deduplicates():
+    md = "### 1. [[ISAC]]\n### 2. [[ISAC]]"
     result = extract_topics_from_markdown(md)
     assert result == ["ISAC"]
 

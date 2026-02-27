@@ -98,8 +98,8 @@ def load_topic_registry(path: Path) -> list[str]:
 
 
 def extract_topics_from_markdown(markdown: str) -> list[str]:
-    """Parse topic names from ### N. [[Topic]] headings in LLM output."""
-    return re.findall(r"### \d+\.\s+\[\[(.+?)\]\]", markdown)
+    """Parse topic names from ### N. [[Topic]] headings in post-processed Markdown."""
+    return list(dict.fromkeys(re.findall(r"### \d+\.\s+\[\[(.+?)\]\]", markdown)))
 
 
 def update_topic_registry(path: Path, new_topics: list[str]) -> None:
@@ -155,7 +155,7 @@ def call_llm(payload: str, template: str, weeks: int, api_key: str, preferred_to
         "  * Do NOT add [[wiki-links]] to section headings (## or ###) — those are handled separately\n"
         "- Replace all {{PLACEHOLDERS}} with real content from the papers"
         + (
-            f"\n- Prefer these previously used topic names when appropriate: {', '.join(preferred_topics)}"
+            f"\n- Prefer these previously used topic names when appropriate: {', '.join(preferred_topics[-50:])}"
             if preferred_topics
             else ""
         )
@@ -237,7 +237,7 @@ def main() -> None:
     template = template_path.read_text(encoding="utf-8")
 
     print("Calling SiliconFlow GLM-5...")
-    markdown = call_llm(payload, template, args.weeks, api_key, preferred_topics or None)
+    markdown = call_llm(payload, template, args.weeks, api_key, preferred_topics)
 
     markdown = inject_wiki_links(markdown)
 
