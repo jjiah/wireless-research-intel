@@ -27,10 +27,11 @@ def load_papers(
     """Load all papers from week dirs; cap anomalous weeks by citation rank."""
     week_papers: list[list[dict]] = []
     for week_dir in week_dirs:
-        papers = [
-            json.loads(p.read_text(encoding="utf-8"))
-            for p in sorted(week_dir.glob("*.json"))
-        ]
+        papers = []
+        for p in sorted(week_dir.glob("*.json")):
+            paper = json.loads(p.read_text(encoding="utf-8"))
+            if (paper.get("abstract") or "").strip():
+                papers.append(paper)
         week_papers.append(papers)
 
     counts = [len(w) for w in week_papers]

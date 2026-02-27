@@ -216,6 +216,17 @@ def test_load_papers_default_cap_is_500(tmp_path):
     assert len(result) == 510
 
 
+def test_load_papers_excludes_missing_abstract(tmp_path):
+    no_abstract = {**sample_paper(), "abstract": ""}
+    null_abstract = {**sample_paper(), "abstract": None}
+    whitespace_abstract = {**sample_paper(), "abstract": "   "}
+    with_abstract = sample_paper()
+    week = make_week(tmp_path, "2025-01-06", [no_abstract, null_abstract, whitespace_abstract, with_abstract])
+    result = load_papers([week])
+    assert len(result) == 1
+    assert result[0]["abstract"] == with_abstract["abstract"]
+
+
 # --- load_topic_registry ---
 
 def test_load_topic_registry_returns_empty_when_missing(tmp_path):
