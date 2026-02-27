@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Venues — Wireless Intel{% endblock %}
+{% block content %}
+<h2>Venues
+  <small class="text-muted fw-normal fs-6">{{ venues | length }} configured</small>
+</h2>
+
+<table class="table table-striped align-middle mt-3">
+  <thead class="table-dark">
+    <tr>
+      <th>ID</th>
+      <th>Name</th>
+      <th>Type</th>
+      <th>OpenAlex Source IDs</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in venues %}
+    <tr>
+      <td><code>{{ v.id }}</code></td>
+      <td>{{ v.name }}</td>
+      <td><span class="badge bg-secondary">{{ v.get('type', '') }}</span></td>
+      <td><small class="font-monospace text-muted">{{ v.openalex_source_ids | join(', ') }}</small></td>
+      <td>
+        <form method="post" action="/venues/remove/{{ v.id }}"
+              onsubmit="return confirm('Remove {{ v.id }}?')">
+          <button class="btn btn-sm btn-outline-danger">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h5 class="mt-5 border-bottom pb-2">Add Venue</h5>
+<form method="post" action="/venues/add" class="row g-3 mt-1">
+  <div class="col-md-2">
+    <label class="form-label">Venue ID <span class="text-danger">*</span></label>
+    <input type="text" class="form-control font-monospace" name="id"
+           placeholder="ieee_twc" required>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">Name</label>
+    <input type="text" class="form-control" name="name"
+           placeholder="IEEE Transactions on Wireless Communications">
+  </div>
+  <div class="col-md-2">
+    <label class="form-label">Type</label>
+    <select class="form-select" name="type">
+      <option value="journal">journal</option>
+      <option value="conference">conference</option>
+    </select>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label">OpenAlex Source IDs (comma-separated) <span class="text-danger">*</span></label>
+    <input type="text" class="form-control font-monospace" name="openalex_source_ids"
+           placeholder="S12345678, S87654321" required>
+  </div>
+  <div class="col-12">
+    <button type="submit" class="btn btn-success">Add Venue</button>
+  </div>
+</form>
+{% endblock %}

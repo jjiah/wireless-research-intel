@@ -78,3 +78,61 @@ def test_settings_save_writes_env_files(client, app_tmp):
     assert "C:\\new-reports" in private
     assert "oalex-key" in openalex
     assert "user@example.com" in openalex
+
+
+# ── venues page ──────────────────────────────────────────────────────────────
+
+SAMPLE_SOURCES_YAML = """\
+version: 4
+venues:
+  - id: ieee_twc
+    name: "IEEE Transactions on Wireless Communications"
+    type: "journal"
+    openalex_source_ids:
+      - "S63459445"
+"""
+
+
+def test_venues_returns_200(client, app_tmp):
+    (app_tmp / "sources.yaml").write_text(SAMPLE_SOURCES_YAML, encoding="utf-8")
+    resp = client.get("/venues")
+    assert resp.status_code == 200
+
+
+def test_venues_lists_existing_venues(client, app_tmp):
+    (app_tmp / "sources.yaml").write_text(SAMPLE_SOURCES_YAML, encoding="utf-8")
+    resp = client.get("/venues")
+    assert b"ieee_twc" in resp.data
+
+
+def test_venues_add_creates_entry(client, app_tmp):
+    (app_tmp / "sources.yaml").write_text(SAMPLE_SOURCES_YAML, encoding="utf-8")
+    resp = client.post("/venues/add", data={
+        "id": "ieee_wcl",
+        "name": "IEEE Wireless Communications Letters",
+        "type": "journal",
+        "openalex_source_ids": "S2500830676",
+    }, follow_redirects=True)
+    assert resp.status_code == 200
+    content = (app_tmp / "sources.yaml").read_text(encoding="utf-8")
+    assert "ieee_wcl" in content
+    assert "S2500830676" in content
+
+
+def test_venues_remove_deletes_entry(client, app_tmp):
+    (app_tmp / "sources.yaml").write_text(SAMPLE_SOURCES_YAML, encoding="utf-8")
+    resp = client.post("/venues/remove/ieee_twc", follow_redirects=True)
+    assert resp.status_code == 200
+    content = (app_tmp / "sources.yaml").read_text(encoding="utf-8")
+    assert "ieee_twc" not in content
+
+
+def test_venues_add_duplicate_shows_error(client, app_tmp):
+    (app_tmp / "sources.yaml").write_text(SAMPLE_SOURCES_YAML, encoding="utf-8")
+    resp = client.post("/venues/add", data={
+        "id": "ieee_twc",  # already exists
+        "name": "Duplicate",
+        "type": "journal",
+        "openalex_source_ids": "S999",
+    }, follow_redirects=True)
+    assert b"already exists" in resp.data

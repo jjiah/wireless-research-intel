@@ -179,7 +179,48 @@ def settings_save():
     save_env_file(OPENALEX_ENV_PATH, openalex)
     flash("Settings saved.", "success")
     return redirect(url_for("settings"))
-# ── venues placeholder (filled in Task 3) ────────────────────────────────────
+# ── venues ────────────────────────────────────────────────────────────────────
+
+@app.route("/venues")
+def venues():
+    data = parse_sources_yaml(SOURCES_PATH)
+    return render_template("venues.html", venues=data["venues"])
+
+
+@app.route("/venues/add", methods=["POST"])
+def venues_add():
+    data = parse_sources_yaml(SOURCES_PATH)
+    new_id = request.form.get("id", "").strip()
+    new_name = request.form.get("name", "").strip()
+    new_type = request.form.get("type", "").strip()
+    raw_ids = request.form.get("openalex_source_ids", "")
+    source_ids = [s.strip() for s in raw_ids.split(",") if s.strip()]
+    if not new_id or not source_ids:
+        flash("Venue ID and at least one OpenAlex source ID are required.", "danger")
+        return redirect(url_for("venues"))
+    if any(v["id"] == new_id for v in data["venues"]):
+        flash(f"Venue '{new_id}' already exists.", "danger")
+        return redirect(url_for("venues"))
+    new_venue: dict = {"id": new_id, "name": new_name, "openalex_source_ids": source_ids}
+    if new_type:
+        new_venue["type"] = new_type
+    data["venues"].append(new_venue)
+    SOURCES_PATH.write_text(serialize_sources_yaml(data), encoding="utf-8")
+    flash(f"Venue '{new_id}' added.", "success")
+    return redirect(url_for("venues"))
+
+
+@app.route("/venues/remove/<venue_id>", methods=["POST"])
+def venues_remove(venue_id: str):
+    data = parse_sources_yaml(SOURCES_PATH)
+    before = len(data["venues"])
+    data["venues"] = [v for v in data["venues"] if v["id"] != venue_id]
+    if len(data["venues"]) == before:
+        flash(f"Venue '{venue_id}' not found.", "danger")
+    else:
+        SOURCES_PATH.write_text(serialize_sources_yaml(data), encoding="utf-8")
+        flash(f"Venue '{venue_id}' removed.", "success")
+    return redirect(url_for("venues"))
 # ── run placeholder (filled in Task 4) ───────────────────────────────────────
 
 
