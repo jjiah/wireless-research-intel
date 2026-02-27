@@ -235,7 +235,7 @@ def ingest_source(
     api_key: str,
     email: Optional[str],
     week_start_day: str,
-) -> Tuple[int, int, int]:
+) -> Tuple[int, int, int, int]:
     works: List[dict] = []
     for source_id in source.openalex_source_ids:
         works.extend(openalex_works(source_id, since_date, until_date, api_key, email))
@@ -248,6 +248,7 @@ def ingest_source(
     added = 0
     seen = 0
     skipped_no_doi = 0
+    skipped_no_abstract = 0
     try:
         conn.execute(
             """
@@ -323,6 +324,29 @@ def ingest_source(
 
             publication_day = parse_iso_date(record["published"]) or ingest_day
             publication_week_start = week_start_for(publication_day, week_start_day).isoformat()
+
+            if not record["abstract"].strip():
+                # Track in SQLite to prevent re-fetching, but don't write JSON to disk.
+                skipped_no_abstract += 1
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO papers
+                    (doi, title, venue_id, venue_name, published, url, source_url, fetched_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        record["doi"],
+                        record["title"],
+                        record["venue_id"],
+                        record["venue_name"],
+                        record["published"],
+                        record["url"],
+                        record["source_url"],
+                        record["fetched_at"],
+                    ),
+                )
+                continue
+
             filename = f"{sanitize_filename(doi)}.json"
             out_path = by_week_dir / publication_week_start / filename
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -350,7 +374,7 @@ def ingest_source(
     finally:
         conn.close()
 
-    return added, seen, skipped_no_doi
+    return added, seen, skipped_no_doi, skipped_no_abstract
 
 
 def main() -> None:
@@ -427,6 +451,7 @@ def main() -> None:
     total_added = 0
     total_seen = 0
     total_skipped = 0
+    total_skipped_no_abstract = 0
 
     for source in sources:
         if not source.openalex_source_ids:
@@ -437,7 +462,7 @@ def main() -> None:
         if exclude_set and source.venue_id in exclude_set:
             continue
         try:
-            added, seen, skipped = ingest_source(
+            added, seen, skipped, skipped_no_abstract = ingest_source(
                 source,
                 resource_dir,
                 since_date,
@@ -449,11 +474,12 @@ def main() -> None:
             total_added += added
             total_seen += seen
             total_skipped += skipped
-            print(f"{source.venue_id}: +{added} new, {seen} existing, {skipped} skipped (no DOI)")
+            total_skipped_no_abstract += skipped_no_abstract
+            print(f"{source.venue_id}: +{added} new, {seen} existing, {skipped} skipped (no DOI), {skipped_no_abstract} skipped (no abstract)")
         except Exception as exc:
             print(f"{source.venue_id}: error {exc}", file=sys.stderr)
 
-    print(f"Total: +{total_added} new, {total_seen} existing, {total_skipped} skipped (no DOI)")
+    print(f"Total: +{total_added} new, {total_seen} existing, {total_skipped} skipped (no DOI), {total_skipped_no_abstract} skipped (no abstract)")
     use_default_incremental_window = (
         args.since is None and args.until is None and args.lookback_days is None
     )
