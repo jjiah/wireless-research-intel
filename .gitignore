@@ -2,3 +2,12 @@ openalex.env
 resource/
 private.env
 logs/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Local Claude Code settings
+.claude/
